@@ -26,7 +26,7 @@
     "@types/cockpit": "github:cockpit-project/cockpit-types",
     "@types/react": "^18.0.28",
     "@types/react-dom": "^18.0.11",
-    "esbuild": "^0.17.12",
+    "esbuild": "^0.25.8",
     "esbuild-plugin-copy": "^2.1.0",
     "esbuild-plugin-sass": "^1.0.1",
     "typescript": "^5.0.2"
