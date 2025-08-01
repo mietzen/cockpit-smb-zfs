@@ -19,7 +19,7 @@ These commands check out the source and build it into the `dist/` directory:
 
 ```
 git clone https://github.com/mietzen/cockpit-smb-zfs.git
-cd starter-kit
+cd cockpit-smb-zfs
 make
 ```
 
