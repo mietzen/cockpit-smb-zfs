@@ -14,11 +14,11 @@
   </description>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>LGPL-2.1-or-later</project_license>
-  <url>https://github.com/your-repo/cockpit-smb-zfs</url>
+  <url>https://github.com/mietzen/cockpit-smb-zfs</url>
   <screenshots>
     <screenshot type="default">
       <caption>Samba-ZFS Overview</caption>
-      <image type="source" width="1022" height="602">https://raw.githubusercontent.com/cockpit-project/starter-kit/main/screenshot.png</image>
+      <image type="source" width="1022" height="602">https://raw.githubusercontent.com/mietzen/cockpit-smb-zfs/main/screenshot.png</image>
     </screenshot>
   </screenshots>
   <releases>
