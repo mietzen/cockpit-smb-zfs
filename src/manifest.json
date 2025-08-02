@@ -2,10 +2,10 @@
     "requires": {
         "cockpit": "137"
     },
-
     "tools": {
         "index": {
-            "label": "SMB-ZFS"
+            "label": "SMB-ZFS",
+            "path": "index.html"
         }
     }
 }

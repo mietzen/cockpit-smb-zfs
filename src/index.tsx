@@ -28,7 +28,7 @@ import "@patternfly/patternfly/patternfly.css";
 import './app.scss';
 
 document.addEventListener("DOMContentLoaded", () => {
-    const container = document.getElementById("root");
+    const container = document.getElementById("app");
     if (container) {
         createRoot(container).render(<App />);
     }
