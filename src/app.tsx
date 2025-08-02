@@ -38,68 +38,6 @@ import {
 } from "@patternfly/react-table";
 import { CubesIcon } from "@patternfly/react-icons";
 
-// Mock cockpit for local development
-if (typeof cockpit === "undefined") {
-    (window as any).cockpit = {
-        spawn: (cmd: string[]) => {
-            console.log("cockpit.spawn:", cmd);
-            const mockState = {
-                initialized: true,
-                primary_pool: "tank",
-                secondary_pools: ["data"],
-                server_name: "SAMBA-SERVER",
-                workgroup: "WORKGROUP",
-                macos_optimized: true,
-                default_home_quota: "50G",
-                users: {
-                    "testuser1": {
-                        shell_access: true,
-                        groups: ["smb_users"],
-                        created: "2025-08-01T14:00:00",
-                        dataset: { name: "tank/homes/testuser1", quota: "50G", pool: "tank" }
-                    },
-                    "testuser2": {
-                        shell_access: false,
-                        groups: [],
-                        created: "2025-08-01T14:05:00",
-                        dataset: { name: "tank/homes/testuser2", quota: null, pool: "tank" }
-                    }
-                },
-                groups: {
-                    "smb_users": { description: "Default Samba users", members: ["testuser1"], created: "2025-08-01T13:59:00" },
-                    "project-alpha": { description: "Project Alpha Team", members: ["testuser1", "testuser2"], created: "2025-08-01T14:10:00" }
-                },
-                shares: {
-                    "public": {
-                        dataset: { name: "data/shares/public", quota: "1T", pool: "data" },
-                        smb_config: { comment: "Public Share", browseable: true, read_only: false, valid_users: "@smb_users" },
-                        system: { owner: "root", group: "smb_users", permissions: "775" },
-                        created: "2025-08-01T14:15:00"
-                    }
-                }
-            };
-
-            if (cmd[0] === "smb-zfs" && cmd[1] === "get-state") {
-                return Promise.resolve(JSON.stringify(mockState));
-            }
-            if (cmd.includes("list") && cmd.includes("pools")) {
-                return Promise.resolve(JSON.stringify(["tank", "data", "backup"]));
-            }
-            return Promise.resolve(JSON.stringify({ success: true, message: "Mocked successful operation." }));
-        },
-        user: {
-            name: "root",
-            superuser: true,
-            groups: ["wheel"],
-        },
-        file: (path: string) => ({
-            read: () => Promise.resolve(""),
-            replace: () => Promise.resolve(true),
-        }),
-        host: "localhost",
-    };
-}
-
 // Type definitions
 interface UserData {
     shell_access: boolean;
