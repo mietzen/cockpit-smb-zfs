@@ -7,16 +7,12 @@ import {
     CardBody,
     CardTitle,
     Checkbox,
-    ClipboardCopy,
     Form,
     FormGroup,
     Grid,
     GridItem,
     Modal,
     ModalVariant,
-    Nav,
-    NavItem,
-    NavList,
     Page,
     PageSection,
     PageSectionVariants,
@@ -27,7 +23,6 @@ import {
     TextInput,
     Title,
     EmptyState,
-    EmptyStateIcon,
     EmptyStateBody,
     Content,
 } from "@patternfly/react-core";
@@ -228,7 +223,7 @@ const App = () => {
             <Page>
                 <PageSection>
                     <EmptyState>
-                        <EmptyStateIcon icon={CubesIcon} />
+                        <CubesIcon size="xl" />
                         <Title headingLevel="h4" size="lg">No Data</Title>
                         <EmptyStateBody>Could not retrieve data from smb-zfs.</EmptyStateBody>
                     </EmptyState>
@@ -344,76 +339,76 @@ const InitialSetup: React.FC<InitialSetupProps> = ({ onSetupComplete }) => {
                             <FormGroup label="Primary ZFS Pool" isRequired fieldId="primary-pool">
                                 <p>Select the ZFS pool for user home directories.</p>
                                 {pools.length > 0 ? (
-                                    <select
-                                        className="pf-v5-c-form-control"
-                                        name="primaryPool"
-                                        value={formData.primaryPool}
+                                    <select 
+                                        className="pf-v5-c-form-control" 
+                                        name="primaryPool" 
+                                        value={formData.primaryPool} 
                                         onChange={(e) => handleChange(e.target.value, e)}
                                     >
                                         <option value="">Select a pool</option>
                                         {pools.map(p => <option key={p} value={p}>{p}</option>)}
                                     </select>
                                 ) : (
-                                    <TextInput
-                                        isRequired
-                                        type="text"
-                                        id="primary-pool"
-                                        name="primaryPool"
-                                        value={formData.primaryPool}
-                                        onChange={handleChange}
+                                    <TextInput 
+                                        isRequired 
+                                        type="text" 
+                                        id="primary-pool" 
+                                        name="primaryPool" 
+                                        value={formData.primaryPool} 
+                                        onChange={handleChange} 
                                     />
                                 )}
                             </FormGroup>
                             <FormGroup label="Secondary ZFS Pools" fieldId="secondary-pools">
                                 <p>Space-separated list of other ZFS pools for shares.</p>
-                                <TextInput
-                                    type="text"
-                                    id="secondary-pools"
-                                    name="secondaryPools"
-                                    value={formData.secondaryPools}
-                                    onChange={handleChange}
+                                <TextInput 
+                                    type="text" 
+                                    id="secondary-pools" 
+                                    name="secondaryPools" 
+                                    value={formData.secondaryPools} 
+                                    onChange={handleChange} 
                                 />
                             </FormGroup>
                             <FormGroup label="Server Name" fieldId="server-name">
-                                <TextInput
-                                    type="text"
-                                    id="server-name"
-                                    name="serverName"
-                                    value={formData.serverName}
-                                    onChange={handleChange}
+                                <TextInput 
+                                    type="text" 
+                                    id="server-name" 
+                                    name="serverName" 
+                                    value={formData.serverName} 
+                                    onChange={handleChange} 
                                 />
                             </FormGroup>
                             <FormGroup label="Workgroup" fieldId="workgroup">
-                                <TextInput
-                                    type="text"
-                                    id="workgroup"
-                                    name="workgroup"
-                                    value={formData.workgroup}
-                                    onChange={handleChange}
+                                <TextInput 
+                                    type="text" 
+                                    id="workgroup" 
+                                    name="workgroup" 
+                                    value={formData.workgroup} 
+                                    onChange={handleChange} 
                                 />
                             </FormGroup>
                             <FormGroup label="Default Home Quota" fieldId="default-home-quota">
                                 <p>Set a default quota for user home directories (e.g., 10G).</p>
-                                <TextInput
-                                    type="text"
-                                    id="default-home-quota"
-                                    name="defaultHomeQuota"
-                                    value={formData.defaultHomeQuota}
-                                    onChange={handleChange}
+                                <TextInput 
+                                    type="text" 
+                                    id="default-home-quota" 
+                                    name="defaultHomeQuota" 
+                                    value={formData.defaultHomeQuota} 
+                                    onChange={handleChange} 
                                 />
                             </FormGroup>
                             <FormGroup fieldId="macos-compat">
-                                <Checkbox
-                                    label="Enable macOS compatibility optimizations"
-                                    id="macos"
-                                    name="macos"
-                                    isChecked={formData.macos}
-                                    onChange={handleChange}
+                                <Checkbox 
+                                    label="Enable macOS compatibility optimizations" 
+                                    id="macos" 
+                                    name="macos" 
+                                    isChecked={formData.macos} 
+                                    onChange={handleChange} 
                                 />
                             </FormGroup>
-                            <Button
-                                variant="primary"
-                                onClick={handleSubmit}
+                            <Button 
+                                variant="primary" 
+                                onClick={handleSubmit} 
                                 isDisabled={loading || !formData.primaryPool}
                             >
                                 {loading ? <Spinner size="sm" /> : 'Run Setup'}
@@ -527,24 +522,24 @@ const UsersTab: React.FC<UsersTabProps> = ({ users, onRefresh }) => {
 
             <CreateUserModal isOpen={isCreateModalOpen} onClose={() => setCreateModalOpen(false)} onSave={onRefresh} />
             {selectedUser && <>
-                <ModifyUserModal
-                    isOpen={isModifyModalOpen}
-                    onClose={() => setModifyModalOpen(false)}
-                    onSave={onRefresh}
-                    user={selectedUser}
-                    userData={users[selectedUser]}
+                <ModifyUserModal 
+                    isOpen={isModifyModalOpen} 
+                    onClose={() => setModifyModalOpen(false)} 
+                    onSave={onRefresh} 
+                    user={selectedUser} 
+                    userData={users[selectedUser]} 
                 />
-                <DeleteUserModal
-                    isOpen={isDeleteModalOpen}
-                    onClose={() => setDeleteModalOpen(false)}
-                    onSave={onRefresh}
-                    user={selectedUser}
+                <DeleteUserModal 
+                    isOpen={isDeleteModalOpen} 
+                    onClose={() => setDeleteModalOpen(false)} 
+                    onSave={onRefresh} 
+                    user={selectedUser} 
                 />
-                <ChangePasswordModal
-                    isOpen={isPasswordModalOpen}
-                    onClose={() => setPasswordModalOpen(false)}
-                    onSave={onRefresh}
-                    user={selectedUser}
+                <ChangePasswordModal 
+                    isOpen={isPasswordModalOpen} 
+                    onClose={() => setPasswordModalOpen(false)} 
+                    onSave={onRefresh} 
+                    user={selectedUser} 
                 />
             </>}
         </PageSection>
@@ -611,12 +606,12 @@ interface CreateUserModalProps {
 }
 
 const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onSave }) => {
-    const [formData, setFormData] = useState({
-        user: '',
-        password: '',
-        shell: false,
-        groups: '',
-        noHome: false
+    const [formData, setFormData] = useState({ 
+        user: '', 
+        password: '', 
+        shell: false, 
+        groups: '', 
+        noHome: false 
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -658,48 +653,48 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onSa
             {error && <Alert variant="danger" title="Failed to create user">{error}</Alert>}
             <Form>
                 <FormGroup label="Username" isRequired fieldId="user-name">
-                    <TextInput
-                        isRequired
-                        type="text"
-                        id="user-name"
-                        name="user"
-                        value={formData.user}
-                        onChange={handleChange}
+                    <TextInput 
+                        isRequired 
+                        type="text" 
+                        id="user-name" 
+                        name="user" 
+                        value={formData.user} 
+                        onChange={handleChange} 
                     />
                 </FormGroup>
                 <FormGroup label="Password" fieldId="user-password">
-                    <TextInput
-                        type="password"
-                        id="user-password"
-                        name="password"
-                        value={formData.password}
-                        onChange={handleChange}
+                    <TextInput 
+                        type="password" 
+                        id="user-password" 
+                        name="password" 
+                        value={formData.password} 
+                        onChange={handleChange} 
                     />
                 </FormGroup>
                 <FormGroup label="Groups" fieldId="user-groups">
-                    <TextInput
-                        type="text"
-                        id="user-groups"
-                        name="groups"
-                        placeholder="comma-separated"
-                        value={formData.groups}
-                        onChange={handleChange}
+                    <TextInput 
+                        type="text" 
+                        id="user-groups" 
+                        name="groups" 
+                        placeholder="comma-separated" 
+                        value={formData.groups} 
+                        onChange={handleChange} 
                     />
                 </FormGroup>
                 <FormGroup fieldId="user-options">
-                    <Checkbox
-                        label="Grant standard shell access"
-                        id="user-shell"
-                        name="shell"
-                        isChecked={formData.shell}
-                        onChange={handleChange}
+                    <Checkbox 
+                        label="Grant standard shell access" 
+                        id="user-shell" 
+                        name="shell" 
+                        isChecked={formData.shell} 
+                        onChange={handleChange} 
                     />
-                    <Checkbox
-                        label="Do not create a home directory"
-                        id="user-no-home"
-                        name="noHome"
-                        isChecked={formData.noHome}
-                        onChange={handleChange}
+                    <Checkbox 
+                        label="Do not create a home directory" 
+                        id="user-no-home" 
+                        name="noHome" 
+                        isChecked={formData.noHome} 
+                        onChange={handleChange} 
                     />
                 </FormGroup>
             </Form>
@@ -744,17 +739,17 @@ const ModifyUserModal: React.FC<ModifyUserModalProps> = ({ isOpen, onClose, onSa
         >
             {error && <Alert variant="danger" title="Failed to modify quota">{error}</Alert>}
             <Form>
-                <FormGroup
-                    label="New Quota"
-                    helperText="e.g., 20G. Leave empty or use 'none' to remove."
+                <FormGroup 
+                    label="New Quota" 
+                    helperText="e.g., 20G. Leave empty or use 'none' to remove." 
                     fieldId="user-quota"
                 >
-                    <TextInput
-                        type="text"
-                        id="user-quota"
-                        name="quota"
-                        value={quota}
-                        onChange={(_event, value) => setQuota(value)}
+                    <TextInput 
+                        type="text" 
+                        id="user-quota" 
+                        name="quota" 
+                        value={quota} 
+                        onChange={(_event, value) => setQuota(value)} 
                     />
                 </FormGroup>
             </Form>
@@ -801,12 +796,12 @@ const DeleteUserModal: React.FC<DeleteUserModalProps> = ({ isOpen, onClose, onSa
         >
             {error && <Alert variant="danger" title="Failed to delete user">{error}</Alert>}
             <p>Are you sure you want to delete user <strong>{user}</strong>?</p>
-            <Checkbox
-                label="Permanently delete the user's ZFS home directory."
-                id="delete-data"
-                name="deleteData"
-                isChecked={deleteData}
-                onChange={(_event, checked) => setDeleteData(checked)}
+            <Checkbox 
+                label="Permanently delete the user's ZFS home directory." 
+                id="delete-data" 
+                name="deleteData" 
+                isChecked={deleteData} 
+                onChange={(_event, checked) => setDeleteData(checked)} 
             />
         </Modal>
     );
@@ -848,10 +843,10 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
             isOpen={isOpen}
             onClose={onClose}
             actions={[
-                <Button
-                    key="save"
-                    variant="primary"
-                    onClick={handleSave}
+                <Button 
+                    key="save" 
+                    variant="primary" 
+                    onClick={handleSave} 
                     isDisabled={loading || !password || password !== confirm}
                 >
                     Set Password
@@ -862,23 +857,23 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
             {error && <Alert variant="danger" title="Password Change Failed">{error}</Alert>}
             <Form>
                 <FormGroup label="New Password" isRequired fieldId="new-password">
-                    <TextInput
-                        isRequired
-                        type="password"
-                        id="new-password"
-                        name="password"
-                        value={password}
-                        onChange={(_event, value) => setPassword(value)}
+                    <TextInput 
+                        isRequired 
+                        type="password" 
+                        id="new-password" 
+                        name="password" 
+                        value={password} 
+                        onChange={(_event, value) => setPassword(value)} 
                     />
                 </FormGroup>
                 <FormGroup label="Confirm New Password" isRequired fieldId="confirm-password">
-                    <TextInput
-                        isRequired
-                        type="password"
-                        id="confirm-password"
-                        name="confirm"
-                        value={confirm}
-                        onChange={(_event, value) => setConfirm(value)}
+                    <TextInput 
+                        isRequired 
+                        type="password" 
+                        id="confirm-password" 
+                        name="confirm" 
+                        value={confirm} 
+                        onChange={(_event, value) => setConfirm(value)} 
                     />
                 </FormGroup>
             </Form>
@@ -915,20 +910,20 @@ const GroupsTab: React.FC<GroupsTabProps> = ({ groups, users, onRefresh }) => {
 
             <CreateGroupModal isOpen={isCreateModalOpen} onClose={() => setCreateModalOpen(false)} onSave={onRefresh} />
             {selectedGroup && <>
-                <ModifyGroupModal
-                    isOpen={isModifyModalOpen}
-                    onClose={() => setModifyModalOpen(false)}
-                    onSave={onRefresh}
-                    group={selectedGroup}
-                    groupData={groups[selectedGroup]}
-                    allUsers={users}
+                <ModifyGroupModal 
+                    isOpen={isModifyModalOpen} 
+                    onClose={() => setModifyModalOpen(false)} 
+                    onSave={onRefresh} 
+                    group={selectedGroup} 
+                    groupData={groups[selectedGroup]} 
+                    allUsers={users} 
                 />
-                <DeleteModal
-                    isOpen={isDeleteModalOpen}
-                    onClose={() => setDeleteModalOpen(false)}
-                    onConfirm={() => smbZfsApi.run(['delete', 'group', selectedGroup]).then(onRefresh).then(() => setDeleteModalOpen(false))}
-                    item={selectedGroup}
-                    type="group"
+                <DeleteModal 
+                    isOpen={isDeleteModalOpen} 
+                    onClose={() => setDeleteModalOpen(false)} 
+                    onConfirm={() => smbZfsApi.run(['delete', 'group', selectedGroup]).then(onRefresh).then(() => setDeleteModalOpen(false))} 
+                    item={selectedGroup} 
+                    type="group" 
                 />
             </>}
         </PageSection>
@@ -1031,32 +1026,32 @@ const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onClose, on
             {error && <Alert variant="danger" title="Failed to create group">{error}</Alert>}
             <Form>
                 <FormGroup label="Group Name" isRequired fieldId="group-name">
-                    <TextInput
-                        isRequired
-                        type="text"
-                        id="group-name"
-                        name="group"
-                        value={formData.group}
-                        onChange={handleChange}
+                    <TextInput 
+                        isRequired 
+                        type="text" 
+                        id="group-name" 
+                        name="group" 
+                        value={formData.group} 
+                        onChange={handleChange} 
                     />
                 </FormGroup>
                 <FormGroup label="Description" fieldId="group-desc">
-                    <TextInput
-                        type="text"
-                        id="group-desc"
-                        name="description"
-                        value={formData.description}
-                        onChange={handleChange}
+                    <TextInput 
+                        type="text" 
+                        id="group-desc" 
+                        name="description" 
+                        value={formData.description} 
+                        onChange={handleChange} 
                     />
                 </FormGroup>
                 <FormGroup label="Initial Members" fieldId="group-users">
-                    <TextInput
-                        type="text"
-                        id="group-users"
-                        name="users"
-                        placeholder="comma-separated"
-                        value={formData.users}
-                        onChange={handleChange}
+                    <TextInput 
+                        type="text" 
+                        id="group-users" 
+                        name="users" 
+                        placeholder="comma-separated" 
+                        value={formData.users} 
+                        onChange={handleChange} 
                     />
                 </FormGroup>
             </Form>
@@ -1113,23 +1108,23 @@ const ModifyGroupModal: React.FC<ModifyGroupModalProps> = ({ isOpen, onClose, on
                     </Content>
                 </FormGroup>
                 <FormGroup label="Add Users" fieldId="add-users">
-                    <TextInput
-                        type="text"
-                        id="add-users"
-                        name="addUsers"
-                        placeholder="comma-separated"
-                        value={addUsers}
-                        onChange={(_event, value) => setAddUsers(value)}
+                    <TextInput 
+                        type="text" 
+                        id="add-users" 
+                        name="addUsers" 
+                        placeholder="comma-separated" 
+                        value={addUsers} 
+                        onChange={(_event, value) => setAddUsers(value)} 
                     />
                 </FormGroup>
                 <FormGroup label="Remove Users" fieldId="remove-users">
-                    <TextInput
-                        type="text"
-                        id="remove-users"
-                        name="removeUsers"
-                        placeholder="comma-separated"
-                        value={removeUsers}
-                        onChange={(_event, value) => setRemoveUsers(value)}
+                    <TextInput 
+                        type="text" 
+                        id="remove-users" 
+                        name="removeUsers" 
+                        placeholder="comma-separated" 
+                        value={removeUsers} 
+                        onChange={(_event, value) => setRemoveUsers(value)} 
                     />
                 </FormGroup>
             </Form>
@@ -1164,26 +1159,26 @@ const SharesTab: React.FC<SharesTabProps> = ({ shares, pools, onRefresh }) => {
             </div>
             <SharesTable shares={shares} onAction={handleAction} />
 
-            <CreateShareModal
-                isOpen={isCreateModalOpen}
-                onClose={() => setCreateModalOpen(false)}
-                onSave={onRefresh}
-                pools={pools}
+            <CreateShareModal 
+                isOpen={isCreateModalOpen} 
+                onClose={() => setCreateModalOpen(false)} 
+                onSave={onRefresh} 
+                pools={pools} 
             />
             {selectedShare && <>
-                <ModifyShareModal
-                    isOpen={isModifyModalOpen}
-                    onClose={() => setModifyModalOpen(false)}
-                    onSave={onRefresh}
-                    share={selectedShare}
-                    shareData={shares[selectedShare]}
-                    pools={pools}
+                <ModifyShareModal 
+                    isOpen={isModifyModalOpen} 
+                    onClose={() => setModifyModalOpen(false)} 
+                    onSave={onRefresh} 
+                    share={selectedShare} 
+                    shareData={shares[selectedShare]} 
+                    pools={pools} 
                 />
-                <DeleteShareModal
-                    isOpen={isDeleteModalOpen}
-                    onClose={() => setDeleteModalOpen(false)}
-                    onSave={onRefresh}
-                    share={selectedShare}
+                <DeleteShareModal 
+                    isOpen={isDeleteModalOpen} 
+                    onClose={() => setDeleteModalOpen(false)} 
+                    onSave={onRefresh} 
+                    share={selectedShare} 
                 />
             </>}
         </PageSection>
@@ -1252,16 +1247,16 @@ interface CreateShareModalProps {
 
 const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, onSave, pools }) => {
     const [formData, setFormData] = useState({
-        share: '',
-        dataset: '',
-        pool: pools[0] || '',
-        comment: '',
+        share: '', 
+        dataset: '', 
+        pool: pools[0] || '', 
+        comment: '', 
         owner: 'root',
-        group: 'smb_users',
-        perms: '775',
-        validUsers: '',
-        readonly: false,
-        noBrowse: false,
+        group: 'smb_users', 
+        perms: '775', 
+        validUsers: '', 
+        readonly: false, 
+        noBrowse: false, 
         quota: ''
     });
     const [loading, setLoading] = useState(false);
@@ -1300,10 +1295,10 @@ const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, on
             isOpen={isOpen}
             onClose={onClose}
             actions={[
-                <Button
-                    key="save"
-                    variant="primary"
-                    onClick={handleSave}
+                <Button 
+                    key="save" 
+                    variant="primary" 
+                    onClick={handleSave} 
                     isDisabled={loading || !formData.share || !formData.dataset}
                 >
                     Save
@@ -1316,35 +1311,35 @@ const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, on
                 <Grid hasGutter>
                     <GridItem span={6}>
                         <FormGroup label="Share Name" isRequired fieldId="share-name">
-                            <TextInput
-                                isRequired
-                                type="text"
-                                id="share-name"
-                                name="share"
-                                value={formData.share}
-                                onChange={handleChange}
+                            <TextInput 
+                                isRequired 
+                                type="text" 
+                                id="share-name" 
+                                name="share" 
+                                value={formData.share} 
+                                onChange={handleChange} 
                             />
                         </FormGroup>
                     </GridItem>
                     <GridItem span={6}>
                         <FormGroup label="ZFS Dataset Path" isRequired fieldId="share-dataset">
-                            <TextInput
-                                isRequired
-                                type="text"
-                                id="share-dataset"
-                                name="dataset"
-                                placeholder="e.g., data/projects"
-                                value={formData.dataset}
-                                onChange={handleChange}
+                            <TextInput 
+                                isRequired 
+                                type="text" 
+                                id="share-dataset" 
+                                name="dataset" 
+                                placeholder="e.g., data/projects" 
+                                value={formData.dataset} 
+                                onChange={handleChange} 
                             />
                         </FormGroup>
                     </GridItem>
                     <GridItem span={6}>
                         <FormGroup label="ZFS Pool" fieldId="share-pool">
-                            <select
-                                className="pf-v5-c-form-control"
-                                name="pool"
-                                value={formData.pool}
+                            <select 
+                                className="pf-v5-c-form-control" 
+                                name="pool" 
+                                value={formData.pool} 
                                 onChange={(e) => handleChange(e.target.value, e)}
                             >
                                 {pools.map(p => <option key={p} value={p}>{p}</option>)}
@@ -1353,87 +1348,87 @@ const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, on
                     </GridItem>
                     <GridItem span={6}>
                         <FormGroup label="Comment" fieldId="share-comment">
-                            <TextInput
-                                type="text"
-                                id="share-comment"
-                                name="comment"
-                                value={formData.comment}
-                                onChange={handleChange}
+                            <TextInput 
+                                type="text" 
+                                id="share-comment" 
+                                name="comment" 
+                                value={formData.comment} 
+                                onChange={handleChange} 
                             />
                         </FormGroup>
                     </GridItem>
                     <GridItem span={6}>
                         <FormGroup label="Owner (user)" fieldId="share-owner">
-                            <TextInput
-                                type="text"
-                                id="share-owner"
-                                name="owner"
-                                value={formData.owner}
-                                onChange={handleChange}
+                            <TextInput 
+                                type="text" 
+                                id="share-owner" 
+                                name="owner" 
+                                value={formData.owner} 
+                                onChange={handleChange} 
                             />
                         </FormGroup>
                     </GridItem>
                     <GridItem span={6}>
                         <FormGroup label="Owner (group)" fieldId="share-group">
-                            <TextInput
-                                type="text"
-                                id="share-group"
-                                name="group"
-                                value={formData.group}
-                                onChange={handleChange}
+                            <TextInput 
+                                type="text" 
+                                id="share-group" 
+                                name="group" 
+                                value={formData.group} 
+                                onChange={handleChange} 
                             />
                         </FormGroup>
                     </GridItem>
                     <GridItem span={6}>
                         <FormGroup label="Permissions" fieldId="share-perms">
-                            <TextInput
-                                type="text"
-                                id="share-perms"
-                                name="perms"
-                                value={formData.perms}
-                                onChange={handleChange}
+                            <TextInput 
+                                type="text" 
+                                id="share-perms" 
+                                name="perms" 
+                                value={formData.perms} 
+                                onChange={handleChange} 
                             />
                         </FormGroup>
                     </GridItem>
                     <GridItem span={6}>
                         <FormGroup label="Valid Users/Groups" fieldId="share-valid-users">
-                            <TextInput
-                                type="text"
-                                id="share-valid-users"
-                                name="validUsers"
-                                placeholder="user1,@group1"
-                                value={formData.validUsers}
-                                onChange={handleChange}
+                            <TextInput 
+                                type="text" 
+                                id="share-valid-users" 
+                                name="validUsers" 
+                                placeholder="user1,@group1" 
+                                value={formData.validUsers} 
+                                onChange={handleChange} 
                             />
                         </FormGroup>
                     </GridItem>
                     <GridItem span={6}>
                         <FormGroup label="Quota" fieldId="share-quota">
-                            <TextInput
-                                type="text"
-                                id="share-quota"
-                                name="quota"
-                                placeholder="e.g., 100G"
-                                value={formData.quota}
-                                onChange={handleChange}
+                            <TextInput 
+                                type="text" 
+                                id="share-quota" 
+                                name="quota" 
+                                placeholder="e.g., 100G" 
+                                value={formData.quota} 
+                                onChange={handleChange} 
                             />
                         </FormGroup>
                     </GridItem>
                     <GridItem span={6}>
                         <FormGroup fieldId="share-options">
-                            <Checkbox
-                                label="Make share read-only"
-                                id="share-readonly"
-                                name="readonly"
-                                isChecked={formData.readonly}
-                                onChange={handleChange}
+                            <Checkbox 
+                                label="Make share read-only" 
+                                id="share-readonly" 
+                                name="readonly" 
+                                isChecked={formData.readonly} 
+                                onChange={handleChange} 
                             />
-                            <Checkbox
-                                label="Hide share from network browse"
-                                id="share-no-browse"
-                                name="noBrowse"
-                                isChecked={formData.noBrowse}
-                                onChange={handleChange}
+                            <Checkbox 
+                                label="Hide share from network browse" 
+                                id="share-no-browse" 
+                                name="noBrowse" 
+                                isChecked={formData.noBrowse} 
+                                onChange={handleChange} 
                             />
                         </FormGroup>
                     </GridItem>
@@ -1487,21 +1482,21 @@ const ModifyShareModal: React.FC<ModifyShareModalProps> = ({ isOpen, onClose, on
             {error && <Alert variant="danger" title="Failed to modify share">{error}</Alert>}
             <Form>
                 <FormGroup label="Comment" fieldId="mod-share-comment">
-                    <TextInput
-                        type="text"
-                        id="mod-share-comment"
-                        name="comment"
-                        value={comment}
-                        onChange={(_event, value) => setComment(value)}
+                    <TextInput 
+                        type="text" 
+                        id="mod-share-comment" 
+                        name="comment" 
+                        value={comment} 
+                        onChange={(_event, value) => setComment(value)} 
                     />
                 </FormGroup>
                 <FormGroup label="Quota" fieldId="mod-share-quota">
-                    <TextInput
-                        type="text"
-                        id="mod-share-quota"
-                        name="quota"
-                        value={quota}
-                        onChange={(_event, value) => setQuota(value)}
+                    <TextInput 
+                        type="text" 
+                        id="mod-share-quota" 
+                        name="quota" 
+                        value={quota} 
+                        onChange={(_event, value) => setQuota(value)} 
                     />
                 </FormGroup>
                 <Content>
@@ -1551,12 +1546,12 @@ const DeleteShareModal: React.FC<DeleteShareModalProps> = ({ isOpen, onClose, on
         >
             {error && <Alert variant="danger" title="Failed to delete share">{error}</Alert>}
             <p>Are you sure you want to delete share <strong>{share}</strong>?</p>
-            <Checkbox
-                label="Permanently delete the share's ZFS dataset."
-                id="delete-data"
-                name="deleteData"
-                isChecked={deleteData}
-                onChange={(_event, checked) => setDeleteData(checked)}
+            <Checkbox 
+                label="Permanently delete the share's ZFS dataset." 
+                id="delete-data" 
+                name="deleteData" 
+                isChecked={deleteData} 
+                onChange={(_event, checked) => setDeleteData(checked)} 
             />
         </Modal>
     );
@@ -1582,11 +1577,11 @@ const PasswordTab: React.FC<PasswordTabProps> = ({ user, onRefresh }) => {
                     </Button>
                 </CardBody>
             </Card>
-            <ChangePasswordModal
-                isOpen={isPasswordModalOpen}
-                onClose={() => setPasswordModalOpen(false)}
-                onSave={onRefresh}
-                user={user}
+            <ChangePasswordModal 
+                isOpen={isPasswordModalOpen} 
+                onClose={() => setPasswordModalOpen(false)} 
+                onSave={onRefresh} 
+                user={user} 
             />
         </PageSection>
     );
