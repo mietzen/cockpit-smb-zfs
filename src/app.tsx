@@ -31,7 +31,6 @@ import {
     EmptyState,
     EmptyStateIcon,
     EmptyStateBody,
-    EmptyStateHeader,
 } from "@patternfly/react-core";
 import {
     Table,
@@ -175,7 +174,7 @@ const App = () => {
     }
 
     if (!state) {
-        return <Page><PageSection><EmptyState><EmptyStateHeader titleText="No Data" headingLevel="h4" /><EmptyStateBody>Could not retrieve data from smb-zfs.</EmptyStateBody></EmptyState></PageSection></Page>;
+        return <Page><PageSection><EmptyState><EmptyState titleText="No Data" headingLevel="h4" /><EmptyStateBody>Could not retrieve data from smb-zfs.</EmptyStateBody></EmptyState></PageSection></Page>;
     }
 
     if (!state.initialized) {
@@ -225,6 +224,8 @@ const App = () => {
     );
 };
 
+export default App;
+
 
 // #region Initial Setup
 const InitialSetup = ({ onSetupComplete }) => {
@@ -258,7 +259,7 @@ const InitialSetup = ({ onSetupComplete }) => {
         if (formData.workgroup) command.push('--workgroup', formData.workgroup);
         if (formData.macos) command.push('--macos');
         if (formData.defaultHomeQuota) command.push('--default-home-quota', formData.defaultHomeQuota);
-        
+
         smbZfsApi.run(command)
             .then(() => onSetupComplete())
             .catch(err => setError(err.message))
@@ -402,7 +403,7 @@ const UsersTab = ({ users, onRefresh }) => {
                 <Button variant="primary" onClick={() => setCreateModalOpen(true)}>Create User</Button>
             </div>
             <UsersTable users={users} onAction={handleAction} />
-            
+
             <CreateUserModal isOpen={isCreateModalOpen} onClose={() => setCreateModalOpen(false)} onSave={onRefresh} />
             {selectedUser && <>
                 <ModifyUserModal isOpen={isModifyModalOpen} onClose={() => setModifyModalOpen(false)} onSave={onRefresh} user={selectedUser} userData={users[selectedUser]} />
@@ -468,7 +469,7 @@ const CreateUserModal = ({ isOpen, onClose, onSave }) => {
         if (formData.shell) command.push('--shell');
         if (formData.groups) command.push('--groups', formData.groups);
         if (formData.noHome) command.push('--no-home');
-        
+
         smbZfsApi.run(command)
             .then(() => { onSave(); onClose(); })
             .catch(err => setError(err.message))
@@ -545,7 +546,7 @@ const DeleteUserModal = ({ isOpen, onClose, onSave, user }) => {
         setError(null);
         const command = ['delete', 'user', user, '--yes'];
         if (deleteData) command.push('--delete-data');
-        
+
         smbZfsApi.run(command)
             .then(() => { onSave(); onClose(); })
             .catch(err => setError(err.message))
@@ -632,7 +633,7 @@ const GroupsTab = ({ groups, users, onRefresh }) => {
                 <Button variant="primary" onClick={() => setCreateModalOpen(true)}>Create Group</Button>
             </div>
             <GroupsTable groups={groups} onAction={handleAction} />
-            
+
             <CreateGroupModal isOpen={isCreateModalOpen} onClose={() => setCreateModalOpen(false)} onSave={onRefresh} />
             {selectedGroup && <>
                 <ModifyGroupModal isOpen={isModifyModalOpen} onClose={() => setModifyModalOpen(false)} onSave={onRefresh} group={selectedGroup} groupData={groups[selectedGroup]} allUsers={users} />
@@ -693,7 +694,7 @@ const CreateGroupModal = ({ isOpen, onClose, onSave }) => {
         const command = ['create', 'group', formData.group];
         if (formData.description) command.push('--description', formData.description);
         if (formData.users) command.push('--users', formData.users);
-        
+
         smbZfsApi.run(command)
             .then(() => { onSave(); onClose(); })
             .catch(err => setError(err.message))
@@ -733,7 +734,7 @@ const ModifyGroupModal = ({ isOpen, onClose, onSave, group, groupData, allUsers 
         const command = ['modify', 'group', group];
         if (addUsers) command.push('--add-users', addUsers);
         if (removeUsers) command.push('--remove-users', removeUsers);
-        
+
         smbZfsApi.run(command)
             .then(() => { onSave(); onClose(); })
             .catch(err => setError(err.message))
@@ -783,7 +784,7 @@ const SharesTab = ({ shares, pools, onRefresh }) => {
                 <Button variant="primary" onClick={() => setCreateModalOpen(true)}>Create Share</Button>
             </div>
             <SharesTable shares={shares} onAction={handleAction} />
-            
+
             <CreateShareModal isOpen={isCreateModalOpen} onClose={() => setCreateModalOpen(false)} onSave={onRefresh} pools={pools} />
             {selectedShare && <>
                 <ModifyShareModal isOpen={isModifyModalOpen} onClose={() => setModifyModalOpen(false)} onSave={onRefresh} share={selectedShare} shareData={shares[selectedShare]} pools={pools} />
@@ -856,7 +857,7 @@ const CreateShareModal = ({ isOpen, onClose, onSave, pools }) => {
         if (formData.readonly) command.push('--readonly');
         if (formData.noBrowse) command.push('--no-browse');
         if (formData.quota) command.push('--quota', formData.quota);
-        
+
         smbZfsApi.run(command)
             .then(() => { onSave(); onClose(); })
             .catch(err => setError(err.message))
@@ -912,7 +913,7 @@ const ModifyShareModal = ({ isOpen, onClose, onSave, share, shareData, pools }) 
         setLoading(true);
         setError(null);
         const command = ['modify', 'share', share, '--comment', comment, '--quota', quota || 'none'];
-        
+
         smbZfsApi.run(command)
             .then(() => { onSave(); onClose(); })
             .catch(err => setError(err.message))
@@ -950,7 +951,7 @@ const DeleteShareModal = ({ isOpen, onClose, onSave, share }) => {
         setError(null);
         const command = ['delete', 'share', share, '--yes'];
         if (deleteData) command.push('--delete-data');
-        
+
         smbZfsApi.run(command)
             .then(() => { onSave(); onClose(); })
             .catch(err => setError(err.message))
@@ -993,10 +994,3 @@ const PasswordTab = ({ user, onRefresh }) => {
     );
 };
 // #endregion
-
-
-cockpit.transport.wait(() => {
-    const root = document.getElementById("root");
-    ReactDOM.render(<App />, root);
-});
-
