@@ -4,7 +4,7 @@
     "description": "Manage Samba on ZFS",
     "tools": {
         "smb-zfs": {
-            "path": "smb-zfs.html"
+            "path": "index.html"
         }
     }
 }
