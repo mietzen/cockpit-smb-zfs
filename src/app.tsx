@@ -548,20 +548,26 @@ interface CreateUserModalProps {
 }
 
 const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onSave }) => {
-    const [formData, setFormData] = useState({ 
-        user: '', 
-        password: '', 
-        shell: false, 
-        groups: '', 
-        noHome: false 
+    const [formData, setFormData] = useState({
+        user: '',
+        password: '',
+        shell: false,
+        groups: '',
+        noHome: false
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const handleChange = (value: string, event: React.FormEvent<HTMLInputElement>) => {
-        const { name, type } = event.currentTarget;
-        const checked = (event.currentTarget as HTMLInputElement).checked;
-        setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+    // Handler for text inputs
+    const handleTextChange = (value: string, event: React.FormEvent<HTMLInputElement>) => {
+        const { name } = event.currentTarget;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    // Handler for checkboxes
+    const handleCheckboxChange = (checked: boolean, event: React.FormEvent<HTMLInputElement>) => {
+        const { name } = event.currentTarget;
+        setFormData(prev => ({ ...prev, [name]: checked }));
     };
 
     const handleSave = () => {
@@ -573,10 +579,10 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onSa
         if (formData.groups) command.push('--groups', formData.groups);
         if (formData.noHome) command.push('--no-home');
 
-        smbZfsApi.run(command)
-            .then(() => { onSave(); onClose(); })
-            .catch(err => setError(err.message))
-            .finally(() => setLoading(false));
+        // smbZfsApi.run(command)
+        //     .then(() => { onSave(); onClose(); })
+        //     .catch(err => setError(err.message))
+        //     .finally(() => setLoading(false));
     };
 
     return (
@@ -595,48 +601,48 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onSa
             {error && <Alert variant="danger" title="Failed to create user">{error}</Alert>}
             <Form>
                 <FormGroup label="Username" isRequired fieldId="user-name">
-                    <TextInput 
-                        isRequired 
-                        type="text" 
-                        id="user-name" 
-                        name="user" 
-                        value={formData.user} 
-                        onChange={handleChange} 
+                    <TextInput
+                        isRequired
+                        type="text"
+                        id="user-name"
+                        name="user"
+                        value={formData.user}
+                        onChange={handleTextChange} // Use the text handler
                     />
                 </FormGroup>
                 <FormGroup label="Password" fieldId="user-password">
-                    <TextInput 
-                        type="password" 
-                        id="user-password" 
-                        name="password" 
-                        value={formData.password} 
-                        onChange={handleChange} 
+                    <TextInput
+                        type="password"
+                        id="user-password"
+                        name="password"
+                        value={formData.password}
+                        onChange={handleTextChange} // Use the text handler
                     />
                 </FormGroup>
                 <FormGroup label="Groups" fieldId="user-groups">
-                    <TextInput 
-                        type="text" 
-                        id="user-groups" 
-                        name="groups" 
-                        placeholder="comma-separated" 
-                        value={formData.groups} 
-                        onChange={handleChange} 
+                    <TextInput
+                        type="text"
+                        id="user-groups"
+                        name="groups"
+                        placeholder="comma-separated"
+                        value={formData.groups}
+                        onChange={handleTextChange} // Use the text handler
                     />
                 </FormGroup>
                 <FormGroup fieldId="user-options">
-                    <Checkbox 
-                        label="Grant standard shell access" 
-                        id="user-shell" 
-                        name="shell" 
-                        isChecked={formData.shell} 
-                        onChange={handleChange} 
+                    <Checkbox
+                        label="Grant standard shell access"
+                        id="user-shell"
+                        name="shell"
+                        isChecked={formData.shell}
+                        onChange={handleCheckboxChange} // Use the checkbox handler
                     />
-                    <Checkbox 
-                        label="Do not create a home directory" 
-                        id="user-no-home" 
-                        name="noHome" 
-                        isChecked={formData.noHome} 
-                        onChange={handleChange} 
+                    <Checkbox
+                        label="Do not create a home directory"
+                        id="user-no-home"
+                        name="noHome"
+                        isChecked={formData.noHome}
+                        onChange={handleCheckboxChange} // Use the checkbox handler
                     />
                 </FormGroup>
             </Form>
