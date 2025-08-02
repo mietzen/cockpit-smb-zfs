@@ -22,11 +22,14 @@ import { createRoot } from 'react-dom/client';
 
 import "cockpit-dark-theme";
 
-import App from './app.tsx';
+import App from './app';
 
-import "patternfly/patternfly-6-cockpit.scss";
+import "@patternfly/patternfly/patternfly.css";
 import './app.scss';
 
 document.addEventListener("DOMContentLoaded", () => {
-    createRoot(document.getElementById("app")!).render(<App />);
+    const container = document.getElementById("root");
+    if (container) {
+        createRoot(container).render(<App />);
+    }
 });

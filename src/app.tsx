@@ -24,13 +24,12 @@ import {
     Tab,
     Tabs,
     TabTitleText,
-    Text,
-    TextContent,
     TextInput,
     Title,
     EmptyState,
     EmptyStateIcon,
     EmptyStateBody,
+    Content,
 } from "@patternfly/react-core";
 import {
     Table,
@@ -46,8 +45,8 @@ import { CubesIcon } from "@patternfly/react-icons";
 
 // Mock cockpit for local development
 if (typeof cockpit === "undefined") {
-    window.cockpit = {
-        spawn: (cmd) => {
+    (window as any).cockpit = {
+        spawn: (cmd: string[]) => {
             console.log("cockpit.spawn:", cmd);
             const mockState = {
                 initialized: true,
@@ -98,19 +97,70 @@ if (typeof cockpit === "undefined") {
             superuser: true,
             groups: ["wheel"],
         },
-        file: (path) => ({
+        file: (path: string) => ({
             read: () => Promise.resolve(""),
             replace: () => Promise.resolve(true),
         }),
+        host: "localhost",
     };
 }
 
+// Type definitions
+interface UserData {
+    shell_access: boolean;
+    groups: string[];
+    created: string;
+    dataset?: {
+        name: string;
+        quota?: string;
+        pool: string;
+    };
+}
+
+interface GroupData {
+    description?: string;
+    members: string[];
+    created: string;
+}
+
+interface ShareData {
+    dataset: {
+        name: string;
+        quota?: string;
+        pool: string;
+    };
+    smb_config: {
+        comment?: string;
+        browseable: boolean;
+        read_only: boolean;
+        valid_users?: string;
+    };
+    system: {
+        owner: string;
+        group: string;
+        permissions: string;
+    };
+    created: string;
+}
+
+interface State {
+    initialized: boolean;
+    primary_pool?: string;
+    secondary_pools?: string[];
+    server_name?: string;
+    workgroup?: string;
+    macos_optimized?: boolean;
+    default_home_quota?: string;
+    users?: Record<string, UserData>;
+    groups?: Record<string, GroupData>;
+    shares?: Record<string, ShareData>;
+}
 
 // API Wrapper for smb-zfs commands
 const smbZfsApi = {
-    getState: () => cockpit.spawn(["smb-zfs", "get-state"]).then(JSON.parse),
-    listPools: () => cockpit.spawn(["smb-zfs", "list", "pools", "--json"]).then(JSON.parse),
-    run: (command) => cockpit.spawn(["smb-zfs", ...command, "--json"]).then(output => {
+    getState: (): Promise<State> => cockpit.spawn(["smb-zfs", "get-state"]).then(JSON.parse),
+    listPools: (): Promise<string[]> => cockpit.spawn(["smb-zfs", "list", "pools", "--json"]).then(JSON.parse),
+    run: (command: string[]): Promise<any> => cockpit.spawn(["smb-zfs", ...command, "--json"]).then(output => {
         try {
             const result = JSON.parse(output);
             if (result.error) {
@@ -129,12 +179,12 @@ const smbZfsApi = {
 
 // Main Application Component
 const App = () => {
-    const [state, setState] = useState(null);
+    const [state, setState] = useState<State | null>(null);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState<string | null>(null);
     const [isRoot, setIsRoot] = useState(false);
     const [currentUser, setCurrentUser] = useState("");
-    const [activeTabKey, setActiveTabKey] = useState(0);
+    const [activeTabKey, setActiveTabKey] = useState<string | number>(0);
 
     const refreshState = useCallback(() => {
         setLoading(true);
@@ -161,7 +211,7 @@ const App = () => {
         refreshState();
     }, [refreshState]);
 
-    const handleTabClick = (_event, tabIndex) => {
+    const handleTabClick = (_event: React.MouseEvent, tabIndex: string | number) => {
         setActiveTabKey(tabIndex);
     };
 
@@ -170,11 +220,21 @@ const App = () => {
     }
 
     if (error) {
-        return <Page><PageSection><Alert variant="danger" title="Error Loading Plugin" children={error} /></PageSection></Page>;
+        return <Page><PageSection><Alert variant="danger" title="Error Loading Plugin">{error}</Alert></PageSection></Page>;
     }
 
     if (!state) {
-        return <Page><PageSection><EmptyState><EmptyState titleText="No Data" headingLevel="h4" /><EmptyStateBody>Could not retrieve data from smb-zfs.</EmptyStateBody></EmptyState></PageSection></Page>;
+        return (
+            <Page>
+                <PageSection>
+                    <EmptyState>
+                        <EmptyStateIcon icon={CubesIcon} />
+                        <Title headingLevel="h4" size="lg">No Data</Title>
+                        <EmptyStateBody>Could not retrieve data from smb-zfs.</EmptyStateBody>
+                    </EmptyState>
+                </PageSection>
+            </Page>
+        );
     }
 
     if (!state.initialized) {
@@ -196,7 +256,7 @@ const App = () => {
                 <GroupsTab groups={state.groups || {}} users={Object.keys(state.users || {})} onRefresh={refreshState} />
             </Tab>,
             <Tab key="shares" eventKey={3} title={<TabTitleText>Shares</TabTitleText>}>
-                <SharesTab shares={state.shares || {}} pools={state.secondary_pools.concat(state.primary_pool)} onRefresh={refreshState} />
+                <SharesTab shares={state.shares || {}} pools={[...(state.secondary_pools || []), state.primary_pool].filter(Boolean) as string[]} onRefresh={refreshState} />
             </Tab>
         );
     } else {
@@ -211,9 +271,9 @@ const App = () => {
         <Page>
             <PageSection variant={PageSectionVariants.light}>
                 <Title headingLevel="h1">Samba on ZFS Management</Title>
-                <TextContent>
-                    <Text>A tool to manage Samba on a ZFS-backed system.</Text>
-                </TextContent>
+                <Content>
+                    <p>A tool to manage Samba on a ZFS-backed system.</p>
+                </Content>
             </PageSection>
             <PageSection type="tabs">
                 <Tabs activeKey={activeTabKey} onSelect={handleTabClick}>
@@ -226,9 +286,12 @@ const App = () => {
 
 export default App;
 
-
 // #region Initial Setup
-const InitialSetup = ({ onSetupComplete }) => {
+interface InitialSetupProps {
+    onSetupComplete: () => void;
+}
+
+const InitialSetup: React.FC<InitialSetupProps> = ({ onSetupComplete }) => {
     const [formData, setFormData] = useState({
         primaryPool: '',
         secondaryPools: '',
@@ -237,16 +300,17 @@ const InitialSetup = ({ onSetupComplete }) => {
         macos: false,
         defaultHomeQuota: '',
     });
-    const [pools, setPools] = useState([]);
+    const [pools, setPools] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         smbZfsApi.listPools().then(setPools).catch(() => setPools([]));
     }, []);
 
-    const handleChange = (value, event) => {
-        const { name, type, checked } = event.target;
+    const handleChange = (value: string, event: React.FormEvent<HTMLInputElement>) => {
+        const { name, type } = event.currentTarget;
+        const checked = (event.currentTarget as HTMLInputElement).checked;
         setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
     };
 
@@ -270,42 +334,88 @@ const InitialSetup = ({ onSetupComplete }) => {
         <Page>
             <PageSection variant="light">
                 <Title headingLevel="h1">Initial Samba-ZFS Setup</Title>
-                <Text>This system has not been configured yet. Please provide the initial setup parameters.</Text>
+                <p>This system has not been configured yet. Please provide the initial setup parameters.</p>
             </PageSection>
             <PageSection>
                 <Card>
                     <CardBody>
-                        {error && <Alert variant="danger" title="Setup Failed" children={error} />}
+                        {error && <Alert variant="danger" title="Setup Failed">{error}</Alert>}
                         <Form>
                             <FormGroup label="Primary ZFS Pool" isRequired fieldId="primary-pool">
                                 <p>Select the ZFS pool for user home directories.</p>
                                 {pools.length > 0 ? (
-                                    <select className="pf-v5-c-form-control" name="primaryPool" value={formData.primaryPool} onChange={(e) => handleChange(e.target.value, e)}>
+                                    <select
+                                        className="pf-v5-c-form-control"
+                                        name="primaryPool"
+                                        value={formData.primaryPool}
+                                        onChange={(e) => handleChange(e.target.value, e)}
+                                    >
                                         <option value="">Select a pool</option>
                                         {pools.map(p => <option key={p} value={p}>{p}</option>)}
                                     </select>
                                 ) : (
-                                    <TextInput isRequired type="text" id="primary-pool" name="primaryPool" value={formData.primaryPool} onChange={handleChange} />
+                                    <TextInput
+                                        isRequired
+                                        type="text"
+                                        id="primary-pool"
+                                        name="primaryPool"
+                                        value={formData.primaryPool}
+                                        onChange={handleChange}
+                                    />
                                 )}
                             </FormGroup>
                             <FormGroup label="Secondary ZFS Pools" fieldId="secondary-pools">
                                 <p>Space-separated list of other ZFS pools for shares.</p>
-                                <TextInput type="text" id="secondary-pools" name="secondaryPools" value={formData.secondaryPools} onChange={handleChange} />
+                                <TextInput
+                                    type="text"
+                                    id="secondary-pools"
+                                    name="secondaryPools"
+                                    value={formData.secondaryPools}
+                                    onChange={handleChange}
+                                />
                             </FormGroup>
                             <FormGroup label="Server Name" fieldId="server-name">
-                                <TextInput type="text" id="server-name" name="serverName" value={formData.serverName} onChange={handleChange} />
+                                <TextInput
+                                    type="text"
+                                    id="server-name"
+                                    name="serverName"
+                                    value={formData.serverName}
+                                    onChange={handleChange}
+                                />
                             </FormGroup>
                             <FormGroup label="Workgroup" fieldId="workgroup">
-                                <TextInput type="text" id="workgroup" name="workgroup" value={formData.workgroup} onChange={handleChange} />
+                                <TextInput
+                                    type="text"
+                                    id="workgroup"
+                                    name="workgroup"
+                                    value={formData.workgroup}
+                                    onChange={handleChange}
+                                />
                             </FormGroup>
                             <FormGroup label="Default Home Quota" fieldId="default-home-quota">
                                 <p>Set a default quota for user home directories (e.g., 10G).</p>
-                                <TextInput type="text" id="default-home-quota" name="defaultHomeQuota" value={formData.defaultHomeQuota} onChange={handleChange} />
+                                <TextInput
+                                    type="text"
+                                    id="default-home-quota"
+                                    name="defaultHomeQuota"
+                                    value={formData.defaultHomeQuota}
+                                    onChange={handleChange}
+                                />
                             </FormGroup>
                             <FormGroup fieldId="macos-compat">
-                                <Checkbox label="Enable macOS compatibility optimizations" id="macos" name="macos" isChecked={formData.macos} onChange={handleChange} />
+                                <Checkbox
+                                    label="Enable macOS compatibility optimizations"
+                                    id="macos"
+                                    name="macos"
+                                    isChecked={formData.macos}
+                                    onChange={handleChange}
+                                />
                             </FormGroup>
-                            <Button variant="primary" onClick={handleSubmit} isDisabled={loading || !formData.primaryPool}>
+                            <Button
+                                variant="primary"
+                                onClick={handleSubmit}
+                                isDisabled={loading || !formData.primaryPool}
+                            >
                                 {loading ? <Spinner size="sm" /> : 'Run Setup'}
                             </Button>
                         </Form>
@@ -318,7 +428,12 @@ const InitialSetup = ({ onSetupComplete }) => {
 // #endregion
 
 // #region Overview Tab
-const OverviewTab = ({ state, onRefresh }) => (
+interface OverviewTabProps {
+    state: State;
+    onRefresh: () => void;
+}
+
+const OverviewTab: React.FC<OverviewTabProps> = ({ state, onRefresh }) => (
     <PageSection>
         <Grid hasGutter>
             <GridItem span={12}>
@@ -327,7 +442,7 @@ const OverviewTab = ({ state, onRefresh }) => (
                     <CardBody>
                         <Grid>
                             <GridItem span={6}><strong>Primary Pool:</strong> {state.primary_pool}</GridItem>
-                            <GridItem span={6}><strong>Secondary Pools:</strong> {state.secondary_pools.join(', ') || 'None'}</GridItem>
+                            <GridItem span={6}><strong>Secondary Pools:</strong> {state.secondary_pools?.join(', ') || 'None'}</GridItem>
                             <GridItem span={6}><strong>Server Name:</strong> {state.server_name}</GridItem>
                             <GridItem span={6}><strong>Workgroup:</strong> {state.workgroup}</GridItem>
                             <GridItem span={6}><strong>macOS Optimized:</strong> {state.macos_optimized ? 'Yes' : 'No'}</GridItem>
@@ -336,61 +451,67 @@ const OverviewTab = ({ state, onRefresh }) => (
                     </CardBody>
                 </Card>
             </GridItem>
-            <GridItem span={12}><Title headingLevel="h2">Users ({Object.keys(state.users || {}).length})</Title><UsersTable users={state.users || {}} isReadOnly /></GridItem>
-            <GridItem span={12}><Title headingLevel="h2">Groups ({Object.keys(state.groups || {}).length})</Title><GroupsTable groups={state.groups || {}} isReadOnly /></GridItem>
-            <GridItem span={12}><Title headingLevel="h2">Shares ({Object.keys(state.shares || {}).length})</Title><SharesTable shares={state.shares || {}} isReadOnly /></GridItem>
+            <GridItem span={12}>
+                <Title headingLevel="h2">Users ({Object.keys(state.users || {}).length})</Title>
+                <UsersTable users={state.users || {}} isReadOnly />
+            </GridItem>
+            <GridItem span={12}>
+                <Title headingLevel="h2">Groups ({Object.keys(state.groups || {}).length})</Title>
+                <GroupsTable groups={state.groups || {}} isReadOnly />
+            </GridItem>
+            <GridItem span={12}>
+                <Title headingLevel="h2">Shares ({Object.keys(state.shares || {}).length})</Title>
+                <SharesTable shares={state.shares || {}} isReadOnly />
+            </GridItem>
         </Grid>
     </PageSection>
 );
 // #endregion
 
 // #region Common Components (Tables, Modals)
-const SimpleTable = ({ columns, data, title }) => (
-    <Card>
-        <CardTitle>{title}</CardTitle>
-        <CardBody>
-            <Table aria-label={title}>
-                <Thead>
-                    <Tr><Th>{columns.join('</Th><Th>')}</Th></Tr>
-                </Thead>
-                <Tbody>
-                    {data.map((row, rowIndex) => (
-                        <Tr key={rowIndex}>
-                            {row.map((cell, cellIndex) => <Td key={cellIndex}>{cell}</Td>)}
-                        </Tr>
-                    ))}
-                </Tbody>
-            </Table>
-        </CardBody>
-    </Card>
-);
+interface DeleteModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onConfirm: () => void;
+    item: string;
+    type: string;
+    loading?: boolean;
+    error?: string | null;
+}
 
-const DeleteModal = ({ isOpen, onClose, onConfirm, item, type, loading, error }) => (
+const DeleteModal: React.FC<DeleteModalProps> = ({ isOpen, onClose, onConfirm, item, type, loading, error }) => (
     <Modal
         variant={ModalVariant.small}
         title={`Delete ${type}`}
         isOpen={isOpen}
         onClose={onClose}
         actions={[
-            <Button key="confirm" variant="danger" onClick={onConfirm} isDisabled={loading}>{loading ? <Spinner size="sm" /> : 'Delete'}</Button>,
+            <Button key="confirm" variant="danger" onClick={onConfirm} isDisabled={loading}>
+                {loading ? <Spinner size="sm" /> : 'Delete'}
+            </Button>,
             <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
         ]}
     >
-        {error && <Alert variant="danger" title={`Failed to delete ${type}`} children={error} />}
+        {error && <Alert variant="danger" title={`Failed to delete ${type}`}>{error}</Alert>}
         Are you sure you want to delete the {type} <strong>{item}</strong>? This action cannot be undone.
     </Modal>
 );
 // #endregion
 
 // #region Users
-const UsersTab = ({ users, onRefresh }) => {
+interface UsersTabProps {
+    users: Record<string, UserData>;
+    onRefresh: () => void;
+}
+
+const UsersTab: React.FC<UsersTabProps> = ({ users, onRefresh }) => {
     const [isCreateModalOpen, setCreateModalOpen] = useState(false);
     const [isModifyModalOpen, setModifyModalOpen] = useState(false);
     const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
     const [isPasswordModalOpen, setPasswordModalOpen] = useState(false);
-    const [selectedUser, setSelectedUser] = useState(null);
+    const [selectedUser, setSelectedUser] = useState<string | null>(null);
 
-    const handleAction = (action, user) => {
+    const handleAction = (action: string, user: string) => {
         setSelectedUser(user);
         if (action === 'modify') setModifyModalOpen(true);
         if (action === 'delete') setDeleteModalOpen(true);
@@ -406,15 +527,37 @@ const UsersTab = ({ users, onRefresh }) => {
 
             <CreateUserModal isOpen={isCreateModalOpen} onClose={() => setCreateModalOpen(false)} onSave={onRefresh} />
             {selectedUser && <>
-                <ModifyUserModal isOpen={isModifyModalOpen} onClose={() => setModifyModalOpen(false)} onSave={onRefresh} user={selectedUser} userData={users[selectedUser]} />
-                <DeleteUserModal isOpen={isDeleteModalOpen} onClose={() => setDeleteModalOpen(false)} onSave={onRefresh} user={selectedUser} />
-                <ChangePasswordModal isOpen={isPasswordModalOpen} onClose={() => setPasswordModalOpen(false)} onSave={onRefresh} user={selectedUser} />
+                <ModifyUserModal
+                    isOpen={isModifyModalOpen}
+                    onClose={() => setModifyModalOpen(false)}
+                    onSave={onRefresh}
+                    user={selectedUser}
+                    userData={users[selectedUser]}
+                />
+                <DeleteUserModal
+                    isOpen={isDeleteModalOpen}
+                    onClose={() => setDeleteModalOpen(false)}
+                    onSave={onRefresh}
+                    user={selectedUser}
+                />
+                <ChangePasswordModal
+                    isOpen={isPasswordModalOpen}
+                    onClose={() => setPasswordModalOpen(false)}
+                    onSave={onRefresh}
+                    user={selectedUser}
+                />
             </>}
         </PageSection>
     );
 };
 
-const UsersTable = ({ users, onAction, isReadOnly = false }) => {
+interface UsersTableProps {
+    users: Record<string, UserData>;
+    onAction?: (action: string, user: string) => void;
+    isReadOnly?: boolean;
+}
+
+const UsersTable: React.FC<UsersTableProps> = ({ users, onAction, isReadOnly = false }) => {
     const columns = ['Username', 'Shell Access', 'Groups', 'Quota', 'Created'];
     if (!isReadOnly) columns.push(''); // For actions
 
@@ -429,21 +572,31 @@ const UsersTable = ({ users, onAction, isReadOnly = false }) => {
         ]
     }));
 
-    const actions = (user): IAction[] => [
-        { title: 'Modify Home Quota', onClick: () => onAction('modify', user) },
-        { title: 'Change Password', onClick: () => onAction('password', user) },
+    const actions = (user: string): IAction[] => [
+        { title: 'Modify Home Quota', onClick: () => onAction?.('modify', user) },
+        { title: 'Change Password', onClick: () => onAction?.('password', user) },
         { isSeparator: true },
-        { title: 'Delete User', onClick: () => onAction('delete', user) },
+        { title: 'Delete User', onClick: () => onAction?.('delete', user) },
     ];
 
     return (
         <Table aria-label="Users Table">
-            <Thead><Tr><Th>{columns.join('</Th><Th>')}</Th></Tr></Thead>
+            <Thead>
+                <Tr>
+                    {columns.map((col, i) => <Th key={i}>{col}</Th>)}
+                </Tr>
+            </Thead>
             <Tbody>
                 {rows.map(row => (
                     <Tr key={row.name}>
-                        {row.cells.map((cell, i) => <Td key={`${row.name}-${i}`} dataLabel={columns[i]}>{cell}</Td>)}
-                        {!isReadOnly && <Td isActionCell><ActionsColumn items={actions(row.name)} /></Td>}
+                        {row.cells.map((cell, i) => (
+                            <Td key={`${row.name}-${i}`} dataLabel={columns[i]}>{cell}</Td>
+                        ))}
+                        {!isReadOnly && onAction && (
+                            <Td isActionCell>
+                                <ActionsColumn items={actions(row.name)} />
+                            </Td>
+                        )}
                     </Tr>
                 ))}
             </Tbody>
@@ -451,13 +604,26 @@ const UsersTable = ({ users, onAction, isReadOnly = false }) => {
     );
 };
 
-const CreateUserModal = ({ isOpen, onClose, onSave }) => {
-    const [formData, setFormData] = useState({ user: '', password: '', shell: false, groups: '', noHome: false });
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+interface CreateUserModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: () => void;
+}
 
-    const handleChange = (value, event) => {
-        const { name, type, checked } = event.target;
+const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onSave }) => {
+    const [formData, setFormData] = useState({
+        user: '',
+        password: '',
+        shell: false,
+        groups: '',
+        noHome: false
+    });
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const handleChange = (value: string, event: React.FormEvent<HTMLInputElement>) => {
+        const { name, type } = event.currentTarget;
+        const checked = (event.currentTarget as HTMLInputElement).checked;
         setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
     };
 
@@ -483,28 +649,76 @@ const CreateUserModal = ({ isOpen, onClose, onSave }) => {
             isOpen={isOpen}
             onClose={onClose}
             actions={[
-                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading || !formData.user}>Save</Button>,
+                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading || !formData.user}>
+                    Save
+                </Button>,
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
             ]}
         >
-            {error && <Alert variant="danger" title="Failed to create user" children={error} />}
+            {error && <Alert variant="danger" title="Failed to create user">{error}</Alert>}
             <Form>
-                <FormGroup label="Username" isRequired fieldId="user-name"><TextInput isRequired type="text" id="user-name" name="user" value={formData.user} onChange={handleChange} /></FormGroup>
-                <FormGroup label="Password" fieldId="user-password"><TextInput type="password" id="user-password" name="password" value={formData.password} onChange={handleChange} /></FormGroup>
-                <FormGroup label="Groups" fieldId="user-groups"><TextInput type="text" id="user-groups" name="groups" placeholder="comma-separated" value={formData.groups} onChange={handleChange} /></FormGroup>
+                <FormGroup label="Username" isRequired fieldId="user-name">
+                    <TextInput
+                        isRequired
+                        type="text"
+                        id="user-name"
+                        name="user"
+                        value={formData.user}
+                        onChange={handleChange}
+                    />
+                </FormGroup>
+                <FormGroup label="Password" fieldId="user-password">
+                    <TextInput
+                        type="password"
+                        id="user-password"
+                        name="password"
+                        value={formData.password}
+                        onChange={handleChange}
+                    />
+                </FormGroup>
+                <FormGroup label="Groups" fieldId="user-groups">
+                    <TextInput
+                        type="text"
+                        id="user-groups"
+                        name="groups"
+                        placeholder="comma-separated"
+                        value={formData.groups}
+                        onChange={handleChange}
+                    />
+                </FormGroup>
                 <FormGroup fieldId="user-options">
-                    <Checkbox label="Grant standard shell access" id="user-shell" name="shell" isChecked={formData.shell} onChange={handleChange} />
-                    <Checkbox label="Do not create a home directory" id="user-no-home" name="noHome" isChecked={formData.noHome} onChange={handleChange} />
+                    <Checkbox
+                        label="Grant standard shell access"
+                        id="user-shell"
+                        name="shell"
+                        isChecked={formData.shell}
+                        onChange={handleChange}
+                    />
+                    <Checkbox
+                        label="Do not create a home directory"
+                        id="user-no-home"
+                        name="noHome"
+                        isChecked={formData.noHome}
+                        onChange={handleChange}
+                    />
                 </FormGroup>
             </Form>
         </Modal>
     );
 };
 
-const ModifyUserModal = ({ isOpen, onClose, onSave, user, userData }) => {
+interface ModifyUserModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: () => void;
+    user: string;
+    userData: UserData;
+}
+
+const ModifyUserModal: React.FC<ModifyUserModalProps> = ({ isOpen, onClose, onSave, user, userData }) => {
     const [quota, setQuota] = useState(userData?.dataset?.quota || '');
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState<string | null>(null);
 
     const handleSave = () => {
         setLoading(true);
@@ -522,24 +736,43 @@ const ModifyUserModal = ({ isOpen, onClose, onSave, user, userData }) => {
             isOpen={isOpen}
             onClose={onClose}
             actions={[
-                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading}>Save</Button>,
+                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading}>
+                    Save
+                </Button>,
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
             ]}
         >
-            {error && <Alert variant="danger" title="Failed to modify quota" children={error} />}
+            {error && <Alert variant="danger" title="Failed to modify quota">{error}</Alert>}
             <Form>
-                <FormGroup label="New Quota" helperText="e.g., 20G. Leave empty or use 'none' to remove." fieldId="user-quota">
-                    <TextInput type="text" id="user-quota" name="quota" value={quota} onChange={setQuota} />
+                <FormGroup
+                    label="New Quota"
+                    helperText="e.g., 20G. Leave empty or use 'none' to remove."
+                    fieldId="user-quota"
+                >
+                    <TextInput
+                        type="text"
+                        id="user-quota"
+                        name="quota"
+                        value={quota}
+                        onChange={(_event, value) => setQuota(value)}
+                    />
                 </FormGroup>
             </Form>
         </Modal>
     );
 };
 
-const DeleteUserModal = ({ isOpen, onClose, onSave, user }) => {
+interface DeleteUserModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: () => void;
+    user: string;
+}
+
+const DeleteUserModal: React.FC<DeleteUserModalProps> = ({ isOpen, onClose, onSave, user }) => {
     const [deleteData, setDeleteData] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState<string | null>(null);
 
     const handleConfirm = () => {
         setLoading(true);
@@ -560,22 +793,37 @@ const DeleteUserModal = ({ isOpen, onClose, onSave, user }) => {
             isOpen={isOpen}
             onClose={onClose}
             actions={[
-                <Button key="confirm" variant="danger" onClick={handleConfirm} isDisabled={loading}>Delete</Button>,
+                <Button key="confirm" variant="danger" onClick={handleConfirm} isDisabled={loading}>
+                    Delete
+                </Button>,
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
             ]}
         >
-            {error && <Alert variant="danger" title="Failed to delete user" children={error} />}
+            {error && <Alert variant="danger" title="Failed to delete user">{error}</Alert>}
             <p>Are you sure you want to delete user <strong>{user}</strong>?</p>
-            <Checkbox label="Permanently delete the user's ZFS home directory." id="delete-data" name="deleteData" isChecked={deleteData} onChange={setDeleteData} />
+            <Checkbox
+                label="Permanently delete the user's ZFS home directory."
+                id="delete-data"
+                name="deleteData"
+                isChecked={deleteData}
+                onChange={(_event, checked) => setDeleteData(checked)}
+            />
         </Modal>
     );
 };
 
-const ChangePasswordModal = ({ isOpen, onClose, onSave, user }) => {
+interface ChangePasswordModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: () => void;
+    user: string;
+}
+
+const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClose, onSave, user }) => {
     const [password, setPassword] = useState('');
     const [confirm, setConfirm] = useState('');
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState<string | null>(null);
 
     const handleSave = () => {
         if (password !== confirm) {
@@ -587,9 +835,9 @@ const ChangePasswordModal = ({ isOpen, onClose, onSave, user }) => {
         // `passwd` command is interactive, so we pipe the password to it.
         const proc = cockpit.spawn(["smb-zfs", "passwd", user, "--json"], { superuser: "require" });
         proc.input(password + "\n" + password + "\n", true);
-        proc.stream(output => console.log(output))
+        proc.stream((output: string) => console.log(output))
            .then(() => { onSave(); onClose(); })
-           .catch(err => setError(err.message || "Failed to change password."))
+           .catch((err: any) => setError(err.message || "Failed to change password."))
            .finally(() => setLoading(false));
     };
 
@@ -600,14 +848,39 @@ const ChangePasswordModal = ({ isOpen, onClose, onSave, user }) => {
             isOpen={isOpen}
             onClose={onClose}
             actions={[
-                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading || !password || password !== confirm}>Set Password</Button>,
+                <Button
+                    key="save"
+                    variant="primary"
+                    onClick={handleSave}
+                    isDisabled={loading || !password || password !== confirm}
+                >
+                    Set Password
+                </Button>,
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
             ]}
         >
-            {error && <Alert variant="danger" title="Password Change Failed" children={error} />}
+            {error && <Alert variant="danger" title="Password Change Failed">{error}</Alert>}
             <Form>
-                <FormGroup label="New Password" isRequired fieldId="new-password"><TextInput isRequired type="password" id="new-password" name="password" value={password} onChange={setPassword} /></FormGroup>
-                <FormGroup label="Confirm New Password" isRequired fieldId="confirm-password"><TextInput isRequired type="password" id="confirm-password" name="confirm" value={confirm} onChange={setConfirm} /></FormGroup>
+                <FormGroup label="New Password" isRequired fieldId="new-password">
+                    <TextInput
+                        isRequired
+                        type="password"
+                        id="new-password"
+                        name="password"
+                        value={password}
+                        onChange={(_event, value) => setPassword(value)}
+                    />
+                </FormGroup>
+                <FormGroup label="Confirm New Password" isRequired fieldId="confirm-password">
+                    <TextInput
+                        isRequired
+                        type="password"
+                        id="confirm-password"
+                        name="confirm"
+                        value={confirm}
+                        onChange={(_event, value) => setConfirm(value)}
+                    />
+                </FormGroup>
             </Form>
         </Modal>
     );
@@ -615,13 +888,19 @@ const ChangePasswordModal = ({ isOpen, onClose, onSave, user }) => {
 // #endregion
 
 // #region Groups
-const GroupsTab = ({ groups, users, onRefresh }) => {
+interface GroupsTabProps {
+    groups: Record<string, GroupData>;
+    users: string[];
+    onRefresh: () => void;
+}
+
+const GroupsTab: React.FC<GroupsTabProps> = ({ groups, users, onRefresh }) => {
     const [isCreateModalOpen, setCreateModalOpen] = useState(false);
     const [isModifyModalOpen, setModifyModalOpen] = useState(false);
     const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
-    const [selectedGroup, setSelectedGroup] = useState(null);
+    const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
 
-    const handleAction = (action, group) => {
+    const handleAction = (action: string, group: string) => {
         setSelectedGroup(group);
         if (action === 'modify') setModifyModalOpen(true);
         if (action === 'delete') setDeleteModalOpen(true);
@@ -636,14 +915,33 @@ const GroupsTab = ({ groups, users, onRefresh }) => {
 
             <CreateGroupModal isOpen={isCreateModalOpen} onClose={() => setCreateModalOpen(false)} onSave={onRefresh} />
             {selectedGroup && <>
-                <ModifyGroupModal isOpen={isModifyModalOpen} onClose={() => setModifyModalOpen(false)} onSave={onRefresh} group={selectedGroup} groupData={groups[selectedGroup]} allUsers={users} />
-                <DeleteModal isOpen={isDeleteModalOpen} onClose={() => setDeleteModalOpen(false)} onConfirm={() => smbZfsApi.run(['delete', 'group', selectedGroup]).then(onRefresh).then(()=>setDeleteModalOpen(false))} item={selectedGroup} type="group" />
+                <ModifyGroupModal
+                    isOpen={isModifyModalOpen}
+                    onClose={() => setModifyModalOpen(false)}
+                    onSave={onRefresh}
+                    group={selectedGroup}
+                    groupData={groups[selectedGroup]}
+                    allUsers={users}
+                />
+                <DeleteModal
+                    isOpen={isDeleteModalOpen}
+                    onClose={() => setDeleteModalOpen(false)}
+                    onConfirm={() => smbZfsApi.run(['delete', 'group', selectedGroup]).then(onRefresh).then(() => setDeleteModalOpen(false))}
+                    item={selectedGroup}
+                    type="group"
+                />
             </>}
         </PageSection>
     );
 };
 
-const GroupsTable = ({ groups, onAction, isReadOnly = false }) => {
+interface GroupsTableProps {
+    groups: Record<string, GroupData>;
+    onAction?: (action: string, group: string) => void;
+    isReadOnly?: boolean;
+}
+
+const GroupsTable: React.FC<GroupsTableProps> = ({ groups, onAction, isReadOnly = false }) => {
     const columns = ['Group Name', 'Description', 'Members', 'Created'];
     if (!isReadOnly) columns.push('');
 
@@ -657,20 +955,30 @@ const GroupsTable = ({ groups, onAction, isReadOnly = false }) => {
         ]
     }));
 
-    const actions = (group): IAction[] => [
-        { title: 'Modify Members', onClick: () => onAction('modify', group) },
+    const actions = (group: string): IAction[] => [
+        { title: 'Modify Members', onClick: () => onAction?.('modify', group) },
         { isSeparator: true },
-        { title: 'Delete Group', onClick: () => onAction('delete', group) },
+        { title: 'Delete Group', onClick: () => onAction?.('delete', group) },
     ];
 
     return (
         <Table aria-label="Groups Table">
-            <Thead><Tr><Th>{columns.join('</Th><Th>')}</Th></Tr></Thead>
+            <Thead>
+                <Tr>
+                    {columns.map((col, i) => <Th key={i}>{col}</Th>)}
+                </Tr>
+            </Thead>
             <Tbody>
                 {rows.map(row => (
                     <Tr key={row.name}>
-                        {row.cells.map((cell, i) => <Td key={`${row.name}-${i}`} dataLabel={columns[i]}>{cell}</Td>)}
-                        {!isReadOnly && <Td isActionCell><ActionsColumn items={actions(row.name)} /></Td>}
+                        {row.cells.map((cell, i) => (
+                            <Td key={`${row.name}-${i}`} dataLabel={columns[i]}>{cell}</Td>
+                        ))}
+                        {!isReadOnly && onAction && (
+                            <Td isActionCell>
+                                <ActionsColumn items={actions(row.name)} />
+                            </Td>
+                        )}
                     </Tr>
                 ))}
             </Tbody>
@@ -678,13 +986,19 @@ const GroupsTable = ({ groups, onAction, isReadOnly = false }) => {
     );
 };
 
-const CreateGroupModal = ({ isOpen, onClose, onSave }) => {
+interface CreateGroupModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: () => void;
+}
+
+const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onClose, onSave }) => {
     const [formData, setFormData] = useState({ group: '', description: '', users: '' });
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState<string | null>(null);
 
-    const handleChange = (value, event) => {
-        const { name } = event.target;
+    const handleChange = (value: string, event: React.FormEvent<HTMLInputElement>) => {
+        const { name } = event.currentTarget;
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
@@ -708,25 +1022,62 @@ const CreateGroupModal = ({ isOpen, onClose, onSave }) => {
             isOpen={isOpen}
             onClose={onClose}
             actions={[
-                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading || !formData.group}>Save</Button>,
+                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading || !formData.group}>
+                    Save
+                </Button>,
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
             ]}
         >
-            {error && <Alert variant="danger" title="Failed to create group" children={error} />}
+            {error && <Alert variant="danger" title="Failed to create group">{error}</Alert>}
             <Form>
-                <FormGroup label="Group Name" isRequired fieldId="group-name"><TextInput isRequired type="text" id="group-name" name="group" value={formData.group} onChange={handleChange} /></FormGroup>
-                <FormGroup label="Description" fieldId="group-desc"><TextInput type="text" id="group-desc" name="description" value={formData.description} onChange={handleChange} /></FormGroup>
-                <FormGroup label="Initial Members" fieldId="group-users"><TextInput type="text" id="group-users" name="users" placeholder="comma-separated" value={formData.users} onChange={handleChange} /></FormGroup>
+                <FormGroup label="Group Name" isRequired fieldId="group-name">
+                    <TextInput
+                        isRequired
+                        type="text"
+                        id="group-name"
+                        name="group"
+                        value={formData.group}
+                        onChange={handleChange}
+                    />
+                </FormGroup>
+                <FormGroup label="Description" fieldId="group-desc">
+                    <TextInput
+                        type="text"
+                        id="group-desc"
+                        name="description"
+                        value={formData.description}
+                        onChange={handleChange}
+                    />
+                </FormGroup>
+                <FormGroup label="Initial Members" fieldId="group-users">
+                    <TextInput
+                        type="text"
+                        id="group-users"
+                        name="users"
+                        placeholder="comma-separated"
+                        value={formData.users}
+                        onChange={handleChange}
+                    />
+                </FormGroup>
             </Form>
         </Modal>
     );
 };
 
-const ModifyGroupModal = ({ isOpen, onClose, onSave, group, groupData, allUsers }) => {
+interface ModifyGroupModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: () => void;
+    group: string;
+    groupData: GroupData;
+    allUsers: string[];
+}
+
+const ModifyGroupModal: React.FC<ModifyGroupModalProps> = ({ isOpen, onClose, onSave, group, groupData, allUsers }) => {
     const [addUsers, setAddUsers] = useState('');
     const [removeUsers, setRemoveUsers] = useState('');
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState<string | null>(null);
 
     const handleSave = () => {
         setLoading(true);
@@ -748,17 +1099,39 @@ const ModifyGroupModal = ({ isOpen, onClose, onSave, group, groupData, allUsers 
             isOpen={isOpen}
             onClose={onClose}
             actions={[
-                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading}>Save</Button>,
+                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading}>
+                    Save
+                </Button>,
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
             ]}
         >
-            {error && <Alert variant="danger" title="Failed to modify group" children={error} />}
+            {error && <Alert variant="danger" title="Failed to modify group">{error}</Alert>}
             <Form>
                 <FormGroup label="Current Members" fieldId="current-members">
-                    <TextContent><Text>{groupData.members.join(', ') || 'None'}</Text></TextContent>
+                    <Content>
+                        <p>{groupData.members.join(', ') || 'None'}</p>
+                    </Content>
                 </FormGroup>
-                <FormGroup label="Add Users" fieldId="add-users"><TextInput type="text" id="add-users" name="addUsers" placeholder="comma-separated" value={addUsers} onChange={setAddUsers} /></FormGroup>
-                <FormGroup label="Remove Users" fieldId="remove-users"><TextInput type="text" id="remove-users" name="removeUsers" placeholder="comma-separated" value={removeUsers} onChange={setRemoveUsers} /></FormGroup>
+                <FormGroup label="Add Users" fieldId="add-users">
+                    <TextInput
+                        type="text"
+                        id="add-users"
+                        name="addUsers"
+                        placeholder="comma-separated"
+                        value={addUsers}
+                        onChange={(_event, value) => setAddUsers(value)}
+                    />
+                </FormGroup>
+                <FormGroup label="Remove Users" fieldId="remove-users">
+                    <TextInput
+                        type="text"
+                        id="remove-users"
+                        name="removeUsers"
+                        placeholder="comma-separated"
+                        value={removeUsers}
+                        onChange={(_event, value) => setRemoveUsers(value)}
+                    />
+                </FormGroup>
             </Form>
         </Modal>
     );
@@ -766,13 +1139,19 @@ const ModifyGroupModal = ({ isOpen, onClose, onSave, group, groupData, allUsers 
 // #endregion
 
 // #region Shares
-const SharesTab = ({ shares, pools, onRefresh }) => {
+interface SharesTabProps {
+    shares: Record<string, ShareData>;
+    pools: string[];
+    onRefresh: () => void;
+}
+
+const SharesTab: React.FC<SharesTabProps> = ({ shares, pools, onRefresh }) => {
     const [isCreateModalOpen, setCreateModalOpen] = useState(false);
     const [isModifyModalOpen, setModifyModalOpen] = useState(false);
     const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
-    const [selectedShare, setSelectedShare] = useState(null);
+    const [selectedShare, setSelectedShare] = useState<string | null>(null);
 
-    const handleAction = (action, share) => {
+    const handleAction = (action: string, share: string) => {
         setSelectedShare(share);
         if (action === 'modify') setModifyModalOpen(true);
         if (action === 'delete') setDeleteModalOpen(true);
@@ -785,16 +1164,39 @@ const SharesTab = ({ shares, pools, onRefresh }) => {
             </div>
             <SharesTable shares={shares} onAction={handleAction} />
 
-            <CreateShareModal isOpen={isCreateModalOpen} onClose={() => setCreateModalOpen(false)} onSave={onRefresh} pools={pools} />
+            <CreateShareModal
+                isOpen={isCreateModalOpen}
+                onClose={() => setCreateModalOpen(false)}
+                onSave={onRefresh}
+                pools={pools}
+            />
             {selectedShare && <>
-                <ModifyShareModal isOpen={isModifyModalOpen} onClose={() => setModifyModalOpen(false)} onSave={onRefresh} share={selectedShare} shareData={shares[selectedShare]} pools={pools} />
-                <DeleteShareModal isOpen={isDeleteModalOpen} onClose={() => setDeleteModalOpen(false)} onSave={onRefresh} share={selectedShare} />
+                <ModifyShareModal
+                    isOpen={isModifyModalOpen}
+                    onClose={() => setModifyModalOpen(false)}
+                    onSave={onRefresh}
+                    share={selectedShare}
+                    shareData={shares[selectedShare]}
+                    pools={pools}
+                />
+                <DeleteShareModal
+                    isOpen={isDeleteModalOpen}
+                    onClose={() => setDeleteModalOpen(false)}
+                    onSave={onRefresh}
+                    share={selectedShare}
+                />
             </>}
         </PageSection>
     );
 };
 
-const SharesTable = ({ shares, onAction, isReadOnly = false }) => {
+interface SharesTableProps {
+    shares: Record<string, ShareData>;
+    onAction?: (action: string, share: string) => void;
+    isReadOnly?: boolean;
+}
+
+const SharesTable: React.FC<SharesTableProps> = ({ shares, onAction, isReadOnly = false }) => {
     const columns = ['Share Name', 'Comment', 'Dataset', 'Quota', 'Access', 'Created'];
     if (!isReadOnly) columns.push('');
 
@@ -810,20 +1212,30 @@ const SharesTable = ({ shares, onAction, isReadOnly = false }) => {
         ]
     }));
 
-    const actions = (share): IAction[] => [
-        { title: 'Modify Share', onClick: () => onAction('modify', share) },
+    const actions = (share: string): IAction[] => [
+        { title: 'Modify Share', onClick: () => onAction?.('modify', share) },
         { isSeparator: true },
-        { title: 'Delete Share', onClick: () => onAction('delete', share) },
+        { title: 'Delete Share', onClick: () => onAction?.('delete', share) },
     ];
 
     return (
         <Table aria-label="Shares Table">
-            <Thead><Tr><Th>{columns.join('</Th><Th>')}</Th></Tr></Thead>
+            <Thead>
+                <Tr>
+                    {columns.map((col, i) => <Th key={i}>{col}</Th>)}
+                </Tr>
+            </Thead>
             <Tbody>
                 {rows.map(row => (
                     <Tr key={row.name}>
-                        {row.cells.map((cell, i) => <Td key={`${row.name}-${i}`} dataLabel={columns[i]}>{cell}</Td>)}
-                        {!isReadOnly && <Td isActionCell><ActionsColumn items={actions(row.name)} /></Td>}
+                        {row.cells.map((cell, i) => (
+                            <Td key={`${row.name}-${i}`} dataLabel={columns[i]}>{cell}</Td>
+                        ))}
+                        {!isReadOnly && onAction && (
+                            <Td isActionCell>
+                                <ActionsColumn items={actions(row.name)} />
+                            </Td>
+                        )}
                     </Tr>
                 ))}
             </Tbody>
@@ -831,16 +1243,33 @@ const SharesTable = ({ shares, onAction, isReadOnly = false }) => {
     );
 };
 
-const CreateShareModal = ({ isOpen, onClose, onSave, pools }) => {
+interface CreateShareModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: () => void;
+    pools: string[];
+}
+
+const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, onSave, pools }) => {
     const [formData, setFormData] = useState({
-        share: '', dataset: '', pool: pools[0] || '', comment: '', owner: 'root',
-        group: 'smb_users', perms: '775', validUsers: '', readonly: false, noBrowse: false, quota: ''
+        share: '',
+        dataset: '',
+        pool: pools[0] || '',
+        comment: '',
+        owner: 'root',
+        group: 'smb_users',
+        perms: '775',
+        validUsers: '',
+        readonly: false,
+        noBrowse: false,
+        quota: ''
     });
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState<string | null>(null);
 
-    const handleChange = (value, event) => {
-        const { name, type, checked } = event.target;
+    const handleChange = (value: string, event: React.FormEvent<HTMLInputElement | HTMLSelectElement>) => {
+        const { name, type } = event.currentTarget;
+        const checked = (event.currentTarget as HTMLInputElement).checked;
         setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
     };
 
@@ -871,43 +1300,165 @@ const CreateShareModal = ({ isOpen, onClose, onSave, pools }) => {
             isOpen={isOpen}
             onClose={onClose}
             actions={[
-                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading || !formData.share || !formData.dataset}>Save</Button>,
+                <Button
+                    key="save"
+                    variant="primary"
+                    onClick={handleSave}
+                    isDisabled={loading || !formData.share || !formData.dataset}
+                >
+                    Save
+                </Button>,
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
             ]}
         >
-            {error && <Alert variant="danger" title="Failed to create share" children={error} />}
+            {error && <Alert variant="danger" title="Failed to create share">{error}</Alert>}
             <Form>
                 <Grid hasGutter>
-                    <GridItem span={6}><FormGroup label="Share Name" isRequired fieldId="share-name"><TextInput isRequired type="text" id="share-name" name="share" value={formData.share} onChange={handleChange} /></FormGroup></GridItem>
-                    <GridItem span={6}><FormGroup label="ZFS Dataset Path" isRequired fieldId="share-dataset"><TextInput isRequired type="text" id="share-dataset" name="dataset" placeholder="e.g., data/projects" value={formData.dataset} onChange={handleChange} /></FormGroup></GridItem>
-                    <GridItem span={6}><FormGroup label="ZFS Pool" fieldId="share-pool">
-                        <select className="pf-v5-c-form-control" name="pool" value={formData.pool} onChange={(e) => handleChange(e.target.value, e)}>
-                            {pools.map(p => <option key={p} value={p}>{p}</option>)}
-                        </select>
-                    </FormGroup></GridItem>
-                    <GridItem span={6}><FormGroup label="Comment" fieldId="share-comment"><TextInput type="text" id="share-comment" name="comment" value={formData.comment} onChange={handleChange} /></FormGroup></GridItem>
-                    <GridItem span={6}><FormGroup label="Owner (user)" fieldId="share-owner"><TextInput type="text" id="share-owner" name="owner" value={formData.owner} onChange={handleChange} /></FormGroup></GridItem>
-                    <GridItem span={6}><FormGroup label="Owner (group)" fieldId="share-group"><TextInput type="text" id="share-group" name="group" value={formData.group} onChange={handleChange} /></FormGroup></GridItem>
-                    <GridItem span={6}><FormGroup label="Permissions" fieldId="share-perms"><TextInput type="text" id="share-perms" name="perms" value={formData.perms} onChange={handleChange} /></FormGroup></GridItem>
-                    <GridItem span={6}><FormGroup label="Valid Users/Groups" fieldId="share-valid-users"><TextInput type="text" id="share-valid-users" name="validUsers" placeholder="user1,@group1" value={formData.validUsers} onChange={handleChange} /></FormGroup></GridItem>
-                    <GridItem span={6}><FormGroup label="Quota" fieldId="share-quota"><TextInput type="text" id="share-quota" name="quota" placeholder="e.g., 100G" value={formData.quota} onChange={handleChange} /></FormGroup></GridItem>
-                    <GridItem span={6}><FormGroup fieldId="share-options">
-                        <Checkbox label="Make share read-only" id="share-readonly" name="readonly" isChecked={formData.readonly} onChange={handleChange} />
-                        <Checkbox label="Hide share from network browse" id="share-no-browse" name="noBrowse" isChecked={formData.noBrowse} onChange={handleChange} />
-                    </FormGroup></GridItem>
+                    <GridItem span={6}>
+                        <FormGroup label="Share Name" isRequired fieldId="share-name">
+                            <TextInput
+                                isRequired
+                                type="text"
+                                id="share-name"
+                                name="share"
+                                value={formData.share}
+                                onChange={handleChange}
+                            />
+                        </FormGroup>
+                    </GridItem>
+                    <GridItem span={6}>
+                        <FormGroup label="ZFS Dataset Path" isRequired fieldId="share-dataset">
+                            <TextInput
+                                isRequired
+                                type="text"
+                                id="share-dataset"
+                                name="dataset"
+                                placeholder="e.g., data/projects"
+                                value={formData.dataset}
+                                onChange={handleChange}
+                            />
+                        </FormGroup>
+                    </GridItem>
+                    <GridItem span={6}>
+                        <FormGroup label="ZFS Pool" fieldId="share-pool">
+                            <select
+                                className="pf-v5-c-form-control"
+                                name="pool"
+                                value={formData.pool}
+                                onChange={(e) => handleChange(e.target.value, e)}
+                            >
+                                {pools.map(p => <option key={p} value={p}>{p}</option>)}
+                            </select>
+                        </FormGroup>
+                    </GridItem>
+                    <GridItem span={6}>
+                        <FormGroup label="Comment" fieldId="share-comment">
+                            <TextInput
+                                type="text"
+                                id="share-comment"
+                                name="comment"
+                                value={formData.comment}
+                                onChange={handleChange}
+                            />
+                        </FormGroup>
+                    </GridItem>
+                    <GridItem span={6}>
+                        <FormGroup label="Owner (user)" fieldId="share-owner">
+                            <TextInput
+                                type="text"
+                                id="share-owner"
+                                name="owner"
+                                value={formData.owner}
+                                onChange={handleChange}
+                            />
+                        </FormGroup>
+                    </GridItem>
+                    <GridItem span={6}>
+                        <FormGroup label="Owner (group)" fieldId="share-group">
+                            <TextInput
+                                type="text"
+                                id="share-group"
+                                name="group"
+                                value={formData.group}
+                                onChange={handleChange}
+                            />
+                        </FormGroup>
+                    </GridItem>
+                    <GridItem span={6}>
+                        <FormGroup label="Permissions" fieldId="share-perms">
+                            <TextInput
+                                type="text"
+                                id="share-perms"
+                                name="perms"
+                                value={formData.perms}
+                                onChange={handleChange}
+                            />
+                        </FormGroup>
+                    </GridItem>
+                    <GridItem span={6}>
+                        <FormGroup label="Valid Users/Groups" fieldId="share-valid-users">
+                            <TextInput
+                                type="text"
+                                id="share-valid-users"
+                                name="validUsers"
+                                placeholder="user1,@group1"
+                                value={formData.validUsers}
+                                onChange={handleChange}
+                            />
+                        </FormGroup>
+                    </GridItem>
+                    <GridItem span={6}>
+                        <FormGroup label="Quota" fieldId="share-quota">
+                            <TextInput
+                                type="text"
+                                id="share-quota"
+                                name="quota"
+                                placeholder="e.g., 100G"
+                                value={formData.quota}
+                                onChange={handleChange}
+                            />
+                        </FormGroup>
+                    </GridItem>
+                    <GridItem span={6}>
+                        <FormGroup fieldId="share-options">
+                            <Checkbox
+                                label="Make share read-only"
+                                id="share-readonly"
+                                name="readonly"
+                                isChecked={formData.readonly}
+                                onChange={handleChange}
+                            />
+                            <Checkbox
+                                label="Hide share from network browse"
+                                id="share-no-browse"
+                                name="noBrowse"
+                                isChecked={formData.noBrowse}
+                                onChange={handleChange}
+                            />
+                        </FormGroup>
+                    </GridItem>
                 </Grid>
             </Form>
         </Modal>
     );
 };
 
-const ModifyShareModal = ({ isOpen, onClose, onSave, share, shareData, pools }) => {
+interface ModifyShareModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: () => void;
+    share: string;
+    shareData: ShareData;
+    pools: string[];
+}
+
+const ModifyShareModal: React.FC<ModifyShareModalProps> = ({ isOpen, onClose, onSave, share, shareData, pools }) => {
     // This would be a large form. For brevity, we'll implement a few key fields.
     // A full implementation would mirror the create form.
-    const [comment, setComment] = useState(shareData.smb_config.comment);
+    const [comment, setComment] = useState(shareData.smb_config.comment || '');
     const [quota, setQuota] = useState(shareData.dataset.quota || '');
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState<string | null>(null);
 
     const handleSave = () => {
         setLoading(true);
@@ -927,24 +1478,51 @@ const ModifyShareModal = ({ isOpen, onClose, onSave, share, shareData, pools }) 
             isOpen={isOpen}
             onClose={onClose}
             actions={[
-                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading}>Save</Button>,
+                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading}>
+                    Save
+                </Button>,
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
             ]}
         >
-            {error && <Alert variant="danger" title="Failed to modify share" children={error} />}
+            {error && <Alert variant="danger" title="Failed to modify share">{error}</Alert>}
             <Form>
-                <FormGroup label="Comment" fieldId="mod-share-comment"><TextInput type="text" id="mod-share-comment" name="comment" value={comment} onChange={setComment} /></FormGroup>
-                <FormGroup label="Quota" fieldId="mod-share-quota"><TextInput type="text" id="mod-share-quota" name="quota" value={quota} onChange={setQuota} /></FormGroup>
-                <TextContent><Text component="small">Note: This is a simplified modification dialog. A full implementation would include all modifiable properties.</Text></TextContent>
+                <FormGroup label="Comment" fieldId="mod-share-comment">
+                    <TextInput
+                        type="text"
+                        id="mod-share-comment"
+                        name="comment"
+                        value={comment}
+                        onChange={(_event, value) => setComment(value)}
+                    />
+                </FormGroup>
+                <FormGroup label="Quota" fieldId="mod-share-quota">
+                    <TextInput
+                        type="text"
+                        id="mod-share-quota"
+                        name="quota"
+                        value={quota}
+                        onChange={(_event, value) => setQuota(value)}
+                    />
+                </FormGroup>
+                <Content>
+                    <p><small>Note: This is a simplified modification dialog. A full implementation would include all modifiable properties.</small></p>
+                </Content>
             </Form>
         </Modal>
     );
 };
 
-const DeleteShareModal = ({ isOpen, onClose, onSave, share }) => {
+interface DeleteShareModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: () => void;
+    share: string;
+}
+
+const DeleteShareModal: React.FC<DeleteShareModalProps> = ({ isOpen, onClose, onSave, share }) => {
     const [deleteData, setDeleteData] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState<string | null>(null);
 
     const handleConfirm = () => {
         setLoading(true);
@@ -965,20 +1543,33 @@ const DeleteShareModal = ({ isOpen, onClose, onSave, share }) => {
             isOpen={isOpen}
             onClose={onClose}
             actions={[
-                <Button key="confirm" variant="danger" onClick={handleConfirm} isDisabled={loading}>Delete</Button>,
+                <Button key="confirm" variant="danger" onClick={handleConfirm} isDisabled={loading}>
+                    Delete
+                </Button>,
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
             ]}
         >
-            {error && <Alert variant="danger" title="Failed to delete share" children={error} />}
+            {error && <Alert variant="danger" title="Failed to delete share">{error}</Alert>}
             <p>Are you sure you want to delete share <strong>{share}</strong>?</p>
-            <Checkbox label="Permanently delete the share's ZFS dataset." id="delete-data" name="deleteData" isChecked={deleteData} onChange={setDeleteData} />
+            <Checkbox
+                label="Permanently delete the share's ZFS dataset."
+                id="delete-data"
+                name="deleteData"
+                isChecked={deleteData}
+                onChange={(_event, checked) => setDeleteData(checked)}
+            />
         </Modal>
     );
 };
 // #endregion
 
 // #region Password Tab (for non-root)
-const PasswordTab = ({ user, onRefresh }) => {
+interface PasswordTabProps {
+    user: string;
+    onRefresh: () => void;
+}
+
+const PasswordTab: React.FC<PasswordTabProps> = ({ user, onRefresh }) => {
     const [isPasswordModalOpen, setPasswordModalOpen] = useState(false);
     return (
         <PageSection>
@@ -986,10 +1577,17 @@ const PasswordTab = ({ user, onRefresh }) => {
                 <CardTitle>Change Your Password</CardTitle>
                 <CardBody>
                     <p>You can change your own Samba password here.</p>
-                    <Button variant="primary" onClick={() => setPasswordModalOpen(true)}>Change Password</Button>
+                    <Button variant="primary" onClick={() => setPasswordModalOpen(true)}>
+                        Change Password
+                    </Button>
                 </CardBody>
             </Card>
-            <ChangePasswordModal isOpen={isPasswordModalOpen} onClose={() => setPasswordModalOpen(false)} onSave={onRefresh} user={user} />
+            <ChangePasswordModal
+                isOpen={isPasswordModalOpen}
+                onClose={() => setPasswordModalOpen(false)}
+                onSave={onRefresh}
+                user={user}
+            />
         </PageSection>
     );
 };
