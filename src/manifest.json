@@ -1,10 +1,11 @@
 {
-    "name": "smb-zfs",
-    "version": "0.1.0",
-    "description": "Manage Samba on ZFS",
+    "requires": {
+        "cockpit": "137"
+    },
+
     "tools": {
-        "smb-zfs": {
-            "path": "index.html"
+        "index": {
+            "label": "Starter Kit"
         }
     }
 }
