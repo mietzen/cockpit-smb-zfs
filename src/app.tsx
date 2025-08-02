@@ -139,8 +139,12 @@ const App = () => {
     }, []);
 
     useEffect(() => {
-        setIsRoot(cockpit.user.superuser);
-        setCurrentUser(cockpit.user.name);
+        const permission = cockpit.permission();
+        permission.addEventListener("changed", () => {
+            setIsRoot(permission.is_superuser || false);
+        });
+        setIsRoot(permission.is_superuser || false);
+        setCurrentUser(cockpit.user?.name || "unknown");
         refreshState();
     }, [refreshState]);
 
