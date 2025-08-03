@@ -25,6 +25,9 @@ import {
     EmptyState,
     EmptyStateBody,
     Content,
+    FormHelperText,
+    HelperText,
+    HelperTextItem,
 } from "@patternfly/react-core";
 import {
     Table,
@@ -36,9 +39,9 @@ import {
     ActionsColumn,
     IAction,
 } from "@patternfly/react-table";
-import { CubesIcon } from "@patternfly/react-icons";
+import { CubesIcon, ExclamationTriangleIcon } from "@patternfly/react-icons";
 
-// Type definitions
+// Type definitions (keeping existing ones)
 interface UserData {
     shell_access: boolean;
     groups: string[];
@@ -89,7 +92,7 @@ interface State {
     shares?: Record<string, ShareData>;
 }
 
-// API Wrapper for smb-zfs commands
+// API Wrapper for smb-zfs commands (keeping existing)
 const smbZfsApi = {
     getState: (): Promise<State> => cockpit.spawn(["smb-zfs", "get-state"]).then(JSON.parse),
     listPools: (): Promise<string[]> => cockpit.spawn(["smb-zfs", "list", "pools", "--json"]).then(JSON.parse),
@@ -101,7 +104,6 @@ const smbZfsApi = {
             }
             return result;
         } catch (e) {
-            // Handle non-json error output
             if (output.toLowerCase().startsWith("error:")) {
                 throw new Error(output);
             }
@@ -110,7 +112,7 @@ const smbZfsApi = {
     })
 };
 
-// Main Application Component
+// Main Application Component (keeping existing structure)
 const App = () => {
     const [state, setState] = useState<State | null>(null);
     const [loading, setLoading] = useState(true);
@@ -127,7 +129,6 @@ const App = () => {
                 setError(null);
             })
             .catch(err => {
-                // If get-state fails, it might mean it's not initialized
                 if (err.message.includes("not initialized")) {
                     setState({ initialized: false });
                     setError(null);
@@ -223,20 +224,19 @@ const App = () => {
 
 export default App;
 
-// #region Initial Setup
+// #region Initial Setup - Updated with validation
 interface InitialSetupProps {
     onSetupComplete: () => void;
 }
 
 const InitialSetup: React.FC<InitialSetupProps> = ({ onSetupComplete }) => {
-    const [formData, setFormData] = useState({
-        primaryPool: '',
-        secondaryPools: '',
-        serverName: cockpit.host,
-        workgroup: 'WORKGROUP',
-        macos: false,
-        defaultHomeQuota: '',
-    });
+    const primaryPool = useValidation('', (value) => value ? { isValid: true } : { isValid: false, error: 'Primary pool is required' });
+    const secondaryPools = useValidation('', (value) => ({ isValid: true }));
+    const serverName = useValidation(cockpit.host, (value) => validateName(value, 'server_name'));
+    const workgroup = useValidation('WORKGROUP', (value) => validateName(value, 'workgroup'));
+    const defaultHomeQuota = useValidation('', validateQuota);
+
+    const [macos, setMacos] = useState(false);
     const [pools, setPools] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -245,21 +245,31 @@ const InitialSetup: React.FC<InitialSetupProps> = ({ onSetupComplete }) => {
         smbZfsApi.listPools().then(setPools).catch(() => setPools([]));
     }, []);
 
-    const handleChange = (event: React.FormEvent<HTMLInputElement>, value: string) => {
-        const { name, type } = event.currentTarget;
-        const checked = (event.currentTarget as HTMLInputElement).checked;
-        setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+    const isFormValid = () => {
+        return primaryPool.isValid &&
+               serverName.isValid &&
+               workgroup.isValid &&
+               defaultHomeQuota.isValid &&
+               primaryPool.value;
     };
 
     const handleSubmit = () => {
+        // Validate all fields
+        primaryPool.handleBlur();
+        serverName.handleBlur();
+        workgroup.handleBlur();
+        defaultHomeQuota.handleBlur();
+
+        if (!isFormValid()) return;
+
         setLoading(true);
         setError(null);
-        const command = ['setup', '--primary-pool', formData.primaryPool];
-        if (formData.secondaryPools) command.push('--secondary-pools', ...formData.secondaryPools.split(' '));
-        if (formData.serverName) command.push('--server-name', formData.serverName);
-        if (formData.workgroup) command.push('--workgroup', formData.workgroup);
-        if (formData.macos) command.push('--macos');
-        if (formData.defaultHomeQuota) command.push('--default-home-quota', formData.defaultHomeQuota);
+        const command = ['setup', '--primary-pool', primaryPool.value];
+        if (secondaryPools.value) command.push('--secondary-pools', ...secondaryPools.value.split(' '));
+        if (serverName.value) command.push('--server-name', serverName.value);
+        if (workgroup.value) command.push('--workgroup', workgroup.value);
+        if (macos) command.push('--macos');
+        if (defaultHomeQuota.value) command.push('--default-home-quota', defaultHomeQuota.value);
 
         smbZfsApi.run(command)
             .then(() => onSetupComplete())
@@ -281,77 +291,121 @@ const InitialSetup: React.FC<InitialSetupProps> = ({ onSetupComplete }) => {
                             <FormGroup label="Primary ZFS Pool" isRequired fieldId="primary-pool">
                                 <p>Select the ZFS pool for user home directories.</p>
                                 {pools.length > 0 ? (
-                                    <select 
-                                        className="pf-v5-c-form-control" 
-                                        name="primaryPool" 
-                                        value={formData.primaryPool} 
-                                        onChange={(e) => handleChange(e, e.target.value)}
+                                    <select
+                                        className="pf-v5-c-form-control"
+                                        value={primaryPool.value}
+                                        onChange={(e) => primaryPool.handleChange(e.target.value)}
+                                        onBlur={() => primaryPool.handleBlur()}
                                     >
                                         <option value="">Select a pool</option>
                                         {pools.map(p => <option key={p} value={p}>{p}</option>)}
                                     </select>
                                 ) : (
-                                    <TextInput 
-                                        isRequired 
-                                        type="text" 
-                                        id="primary-pool" 
-                                        name="primaryPool" 
-                                        value={formData.primaryPool} 
-                                        onChange={handleChange} 
+                                    <TextInput
+                                        isRequired
+                                        type="text"
+                                        id="primary-pool"
+                                        value={primaryPool.value}
+                                        onChange={(_event, value) => primaryPool.handleChange(value)}
+                                        onBlur={() => primaryPool.handleBlur()}
+                                        validated={primaryPool.error ? 'error' : 'default'}
                                     />
                                 )}
+                                {primaryPool.error && (
+                                    <FormHelperText>
+                                        <HelperText>
+                                            <HelperTextItem variant="error" icon={<ExclamationTriangleIcon />}>
+                                                {primaryPool.error}
+                                            </HelperTextItem>
+                                        </HelperText>
+                                    </FormHelperText>
+                                )}
                             </FormGroup>
+
                             <FormGroup label="Secondary ZFS Pools" fieldId="secondary-pools">
                                 <p>Space-separated list of other ZFS pools for shares.</p>
-                                <TextInput 
-                                    type="text" 
-                                    id="secondary-pools" 
-                                    name="secondaryPools" 
-                                    value={formData.secondaryPools} 
-                                    onChange={handleChange} 
+                                <TextInput
+                                    type="text"
+                                    id="secondary-pools"
+                                    value={secondaryPools.value}
+                                    onChange={(_event, value) => secondaryPools.handleChange(value)}
                                 />
                             </FormGroup>
+
                             <FormGroup label="Server Name" fieldId="server-name">
-                                <TextInput 
-                                    type="text" 
-                                    id="server-name" 
-                                    name="serverName" 
-                                    value={formData.serverName} 
-                                    onChange={handleChange} 
+                                <TextInput
+                                    type="text"
+                                    id="server-name"
+                                    value={serverName.value}
+                                    onChange={(_event, value) => serverName.handleChange(value)}
+                                    onBlur={() => serverName.handleBlur()}
+                                    validated={serverName.error ? 'error' : 'default'}
                                 />
+                                {serverName.error && (
+                                    <FormHelperText>
+                                        <HelperText>
+                                            <HelperTextItem variant="error" icon={<ExclamationTriangleIcon />}>
+                                                {serverName.error}
+                                            </HelperTextItem>
+                                        </HelperText>
+                                    </FormHelperText>
+                                )}
                             </FormGroup>
+
                             <FormGroup label="Workgroup" fieldId="workgroup">
-                                <TextInput 
-                                    type="text" 
-                                    id="workgroup" 
-                                    name="workgroup" 
-                                    value={formData.workgroup} 
-                                    onChange={handleChange} 
+                                <TextInput
+                                    type="text"
+                                    id="workgroup"
+                                    value={workgroup.value}
+                                    onChange={(_event, value) => workgroup.handleChange(value)}
+                                    onBlur={() => workgroup.handleBlur()}
+                                    validated={workgroup.error ? 'error' : 'default'}
                                 />
+                                {workgroup.error && (
+                                    <FormHelperText>
+                                        <HelperText>
+                                            <HelperTextItem variant="error" icon={<ExclamationTriangleIcon />}>
+                                                {workgroup.error}
+                                            </HelperTextItem>
+                                        </HelperText>
+                                    </FormHelperText>
+                                )}
                             </FormGroup>
+
                             <FormGroup label="Default Home Quota" fieldId="default-home-quota">
                                 <p>Set a default quota for user home directories (e.g., 10G).</p>
-                                <TextInput 
-                                    type="text" 
-                                    id="default-home-quota" 
-                                    name="defaultHomeQuota" 
-                                    value={formData.defaultHomeQuota} 
-                                    onChange={handleChange} 
+                                <TextInput
+                                    type="text"
+                                    id="default-home-quota"
+                                    value={defaultHomeQuota.value}
+                                    onChange={(_event, value) => defaultHomeQuota.handleChange(value)}
+                                    onBlur={() => defaultHomeQuota.handleBlur()}
+                                    validated={defaultHomeQuota.error ? 'error' : 'default'}
                                 />
+                                {defaultHomeQuota.error && (
+                                    <FormHelperText>
+                                        <HelperText>
+                                            <HelperTextItem variant="error" icon={<ExclamationTriangleIcon />}>
+                                                {defaultHomeQuota.error}
+                                            </HelperTextItem>
+                                        </HelperText>
+                                    </FormHelperText>
+                                )}
                             </FormGroup>
+
                             <FormGroup fieldId="macos-compat">
-                                <Checkbox 
-                                    label="Enable macOS compatibility optimizations" 
-                                    id="macos" 
-                                    name="macos" 
-                                    isChecked={formData.macos} 
-                                    onChange={handleChange} 
+                                <Checkbox
+                                    label="Enable macOS compatibility optimizations"
+                                    id="macos"
+                                    isChecked={macos}
+                                    onChange={(_event, checked) => setMacos(checked)}
                                 />
                             </FormGroup>
-                            <Button 
-                                variant="primary" 
-                                onClick={handleSubmit} 
-                                isDisabled={loading || !formData.primaryPool}
+
+                            <Button
+                                variant="primary"
+                                onClick={handleSubmit}
+                                isDisabled={loading || !isFormValid()}
                             >
                                 {loading ? <Spinner size="sm" /> : 'Run Setup'}
                             </Button>
@@ -362,9 +416,8 @@ const InitialSetup: React.FC<InitialSetupProps> = ({ onSetupComplete }) => {
         </Page>
     );
 };
-// #endregion
 
-// #region Overview Tab
+// #region Overview Tab (keeping existing)
 interface OverviewTabProps {
     state: State;
     onRefresh: () => void;
@@ -403,7 +456,6 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ state, onRefresh }) => (
         </Grid>
     </PageSection>
 );
-// #endregion
 
 // #region Common Components (Tables, Modals)
 interface DeleteModalProps {
@@ -433,9 +485,8 @@ const DeleteModal: React.FC<DeleteModalProps> = ({ isOpen, onClose, onConfirm, i
         Are you sure you want to delete the {type} <strong>{item}</strong>? This action cannot be undone.
     </Modal>
 );
-// #endregion
 
-// #region Users
+// #region Users - Updated with validation
 interface UsersTabProps {
     users: Record<string, UserData>;
     onRefresh: () => void;
@@ -464,24 +515,24 @@ const UsersTab: React.FC<UsersTabProps> = ({ users, onRefresh }) => {
 
             <CreateUserModal isOpen={isCreateModalOpen} onClose={() => setCreateModalOpen(false)} onSave={onRefresh} />
             {selectedUser && <>
-                <ModifyUserModal 
-                    isOpen={isModifyModalOpen} 
-                    onClose={() => setModifyModalOpen(false)} 
-                    onSave={onRefresh} 
-                    user={selectedUser} 
-                    userData={users[selectedUser]} 
+                <ModifyUserModal
+                    isOpen={isModifyModalOpen}
+                    onClose={() => setModifyModalOpen(false)}
+                    onSave={onRefresh}
+                    user={selectedUser}
+                    userData={users[selectedUser]}
                 />
-                <DeleteUserModal 
-                    isOpen={isDeleteModalOpen} 
-                    onClose={() => setDeleteModalOpen(false)} 
-                    onSave={onRefresh} 
-                    user={selectedUser} 
+                <DeleteUserModal
+                    isOpen={isDeleteModalOpen}
+                    onClose={() => setDeleteModalOpen(false)}
+                    onSave={onRefresh}
+                    user={selectedUser}
                 />
-                <ChangePasswordModal 
-                    isOpen={isPasswordModalOpen} 
-                    onClose={() => setPasswordModalOpen(false)} 
-                    onSave={onRefresh} 
-                    user={selectedUser} 
+                <ChangePasswordModal
+                    isOpen={isPasswordModalOpen}
+                    onClose={() => setPasswordModalOpen(false)}
+                    onSave={onRefresh}
+                    user={selectedUser}
                 />
             </>}
         </PageSection>
@@ -496,7 +547,7 @@ interface UsersTableProps {
 
 const UsersTable: React.FC<UsersTableProps> = ({ users, onAction, isReadOnly = false }) => {
     const columns = ['Username', 'Shell Access', 'Groups', 'Quota', 'Created'];
-    if (!isReadOnly) columns.push(''); // For actions
+    if (!isReadOnly) columns.push('');
 
     const rows = Object.entries(users).map(([name, data]) => ({
         name,
@@ -548,30 +599,34 @@ interface CreateUserModalProps {
 }
 
 const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onSave }) => {
-    const [formData, setFormData] = useState({ 
-        user: '', 
-        password: '', 
-        shell: false, 
-        groups: '', 
-        noHome: false 
-    });
+    const userName = useValidation('', (value) => validateName(value, 'user'));
+    const password = useValidation('', validatePassword);
+    const groups = useValidation('', validateUserList);
+
+    const [shell, setShell] = useState(false);
+    const [noHome, setNoHome] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const handleChange = (event: React.FormEvent<HTMLInputElement>, value: string) => {
-        const { name, type } = event.currentTarget;
-        const checked = (event.currentTarget as HTMLInputElement).checked;
-        setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+    const isFormValid = () => {
+        return userName.isValid && password.isValid && groups.isValid && userName.value;
     };
 
     const handleSave = () => {
+        // Validate all fields before submitting
+        userName.handleBlur();
+        password.handleBlur();
+        groups.handleBlur();
+
+        if (!isFormValid()) return;
+
         setLoading(true);
         setError(null);
-        const command = ['create', 'user', formData.user];
-        if (formData.password) command.push('--password', formData.password);
-        if (formData.shell) command.push('--shell');
-        if (formData.groups) command.push('--groups', formData.groups);
-        if (formData.noHome) command.push('--no-home');
+        const command = ['create', 'user', userName.value];
+        if (password.value) command.push('--password', password.value);
+        if (shell) command.push('--shell');
+        if (groups.value) command.push('--groups', groups.value);
+        if (noHome) command.push('--no-home');
 
         smbZfsApi.run(command)
             .then(() => { onSave(); onClose(); })
@@ -586,7 +641,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onSa
             isOpen={isOpen}
             onClose={onClose}
             actions={[
-                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading || !formData.user}>
+                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading || !isFormValid()}>
                     Save
                 </Button>,
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
@@ -595,48 +650,79 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onSa
             {error && <Alert variant="danger" title="Failed to create user">{error}</Alert>}
             <Form>
                 <FormGroup label="Username" isRequired fieldId="user-name">
-                    <TextInput 
-                        isRequired 
-                        type="text" 
-                        id="user-name" 
-                        name="user" 
-                        value={formData.user} 
-                        onChange={handleChange} 
+                    <TextInput
+                        isRequired
+                        type="text"
+                        id="user-name"
+                        value={userName.value}
+                        onChange={(_event, value) => userName.handleChange(value)}
+                        onBlur={() => userName.handleBlur()}
+                        validated={userName.error ? 'error' : 'default'}
                     />
+                    {userName.error && (
+                        <FormHelperText>
+                            <HelperText>
+                                <HelperTextItem variant="error" icon={<ExclamationTriangleIcon />}>
+                                    {userName.error}
+                                </HelperTextItem>
+                            </HelperText>
+                        </FormHelperText>
+                    )}
                 </FormGroup>
+
                 <FormGroup label="Password" fieldId="user-password">
-                    <TextInput 
-                        type="password" 
-                        id="user-password" 
-                        name="password" 
-                        value={formData.password} 
-                        onChange={handleChange} 
+                    <TextInput
+                        type="password"
+                        id="user-password"
+                        value={password.value}
+                        onChange={(_event, value) => password.handleChange(value)}
+                        onBlur={() => password.handleBlur()}
+                        validated={password.error ? 'error' : 'default'}
                     />
+                    {password.error && (
+                        <FormHelperText>
+                            <HelperText>
+                                <HelperTextItem variant="error" icon={<ExclamationTriangleIcon />}>
+                                    {password.error}
+                                </HelperTextItem>
+                            </HelperText>
+                        </FormHelperText>
+                    )}
                 </FormGroup>
+
                 <FormGroup label="Groups" fieldId="user-groups">
-                    <TextInput 
-                        type="text" 
-                        id="user-groups" 
-                        name="groups" 
-                        placeholder="comma-separated" 
-                        value={formData.groups} 
-                        onChange={handleChange} 
+                    <TextInput
+                        type="text"
+                        id="user-groups"
+                        placeholder="comma-separated"
+                        value={groups.value}
+                        onChange={(_event, value) => groups.handleChange(value)}
+                        onBlur={() => groups.handleBlur()}
+                        validated={groups.error ? 'error' : 'default'}
                     />
+                    {groups.error && (
+                        <FormHelperText>
+                            <HelperText>
+                                <HelperTextItem variant="error" icon={<ExclamationTriangleIcon />}>
+                                    {groups.error}
+                                </HelperTextItem>
+                            </HelperText>
+                        </FormHelperText>
+                    )}
                 </FormGroup>
+
                 <FormGroup fieldId="user-options">
-                    <Checkbox 
-                        label="Grant standard shell access" 
-                        id="user-shell" 
-                        name="shell" 
-                        isChecked={formData.shell} 
-                        onChange={handleChange} 
+                    <Checkbox
+                        label="Grant standard shell access"
+                        id="user-shell"
+                        isChecked={shell}
+                        onChange={(_event, checked) => setShell(checked)}
                     />
-                    <Checkbox 
-                        label="Do not create a home directory" 
-                        id="user-no-home" 
-                        name="noHome" 
-                        isChecked={formData.noHome} 
-                        onChange={handleChange} 
+                    <Checkbox
+                        label="Do not create a home directory"
+                        id="user-no-home"
+                        isChecked={noHome}
+                        onChange={(_event, checked) => setNoHome(checked)}
                     />
                 </FormGroup>
             </Form>
@@ -653,14 +739,17 @@ interface ModifyUserModalProps {
 }
 
 const ModifyUserModal: React.FC<ModifyUserModalProps> = ({ isOpen, onClose, onSave, user, userData }) => {
-    const [quota, setQuota] = useState(userData?.dataset?.quota || '');
+    const quota = useValidation(userData?.dataset?.quota || '', validateQuota);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const handleSave = () => {
+        quota.handleBlur();
+        if (!quota.isValid) return;
+
         setLoading(true);
         setError(null);
-        smbZfsApi.run(['modify', 'home', user, '--quota', quota || 'none'])
+        smbZfsApi.run(['modify', 'home', user, '--quota', quota.value || 'none'])
             .then(() => { onSave(); onClose(); })
             .catch(err => setError(err.message))
             .finally(() => setLoading(false));
@@ -673,7 +762,7 @@ const ModifyUserModal: React.FC<ModifyUserModalProps> = ({ isOpen, onClose, onSa
             isOpen={isOpen}
             onClose={onClose}
             actions={[
-                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading}>
+                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading || !quota.isValid}>
                     Save
                 </Button>,
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
@@ -681,18 +770,28 @@ const ModifyUserModal: React.FC<ModifyUserModalProps> = ({ isOpen, onClose, onSa
         >
             {error && <Alert variant="danger" title="Failed to modify quota">{error}</Alert>}
             <Form>
-                <FormGroup 
-                    label="New Quota" 
-                    helperText="e.g., 20G. Leave empty or use 'none' to remove." 
+                <FormGroup
+                    label="New Quota"
+                    helperText="e.g., 20G. Leave empty or use 'none' to remove."
                     fieldId="user-quota"
                 >
-                    <TextInput 
-                        type="text" 
-                        id="user-quota" 
-                        name="quota" 
-                        value={quota} 
-                        onChange={(_event, value) => setQuota(value)} 
+                    <TextInput
+                        type="text"
+                        id="user-quota"
+                        value={quota.value}
+                        onChange={(_event, value) => quota.handleChange(value)}
+                        onBlur={() => quota.handleBlur()}
+                        validated={quota.error ? 'error' : 'default'}
                     />
+                    {quota.error && (
+                        <FormHelperText>
+                            <HelperText>
+                                <HelperTextItem variant="error" icon={<ExclamationTriangleIcon />}>
+                                    {quota.error}
+                                </HelperTextItem>
+                            </HelperText>
+                        </FormHelperText>
+                    )}
                 </FormGroup>
             </Form>
         </Modal>
@@ -738,12 +837,11 @@ const DeleteUserModal: React.FC<DeleteUserModalProps> = ({ isOpen, onClose, onSa
         >
             {error && <Alert variant="danger" title="Failed to delete user">{error}</Alert>}
             <p>Are you sure you want to delete user <strong>{user}</strong>?</p>
-            <Checkbox 
-                label="Permanently delete the user's ZFS home directory." 
-                id="delete-data" 
-                name="deleteData" 
-                isChecked={deleteData} 
-                onChange={(_event, checked) => setDeleteData(checked)} 
+            <Checkbox
+                label="Permanently delete the user's ZFS home directory."
+                id="delete-data"
+                isChecked={deleteData}
+                onChange={(_event, checked) => setDeleteData(checked)}
             />
         </Modal>
     );
@@ -757,21 +855,26 @@ interface ChangePasswordModalProps {
 }
 
 const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClose, onSave, user }) => {
-    const [password, setPassword] = useState('');
-    const [confirm, setConfirm] = useState('');
+    const password = useValidation('', validatePassword);
+    const confirm = useValidation('', (value) => validatePassword(value, password.value));
+
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const isFormValid = () => {
+        return password.isValid && confirm.isValid && password.value && password.value === confirm.value;
+    };
+
     const handleSave = () => {
-        if (password !== confirm) {
-            setError("Passwords do not match.");
-            return;
-        }
+        password.handleBlur();
+        confirm.handleBlur();
+
+        if (!isFormValid()) return;
+
         setLoading(true);
         setError(null);
-        // `passwd` command is interactive, so we pipe the password to it.
         const proc = cockpit.spawn(["smb-zfs", "passwd", user, "--json"], { superuser: "require" });
-        proc.input(password + "\n" + password + "\n", true);
+        proc.input(password.value + "\n" + password.value + "\n", true);
         proc.stream((output: string) => console.log(output))
            .then(() => { onSave(); onClose(); })
            .catch((err: any) => setError(err.message || "Failed to change password."))
@@ -785,11 +888,11 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
             isOpen={isOpen}
             onClose={onClose}
             actions={[
-                <Button 
-                    key="save" 
-                    variant="primary" 
-                    onClick={handleSave} 
-                    isDisabled={loading || !password || password !== confirm}
+                <Button
+                    key="save"
+                    variant="primary"
+                    onClick={handleSave}
+                    isDisabled={loading || !isFormValid()}
                 >
                     Set Password
                 </Button>,
@@ -799,32 +902,58 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
             {error && <Alert variant="danger" title="Password Change Failed">{error}</Alert>}
             <Form>
                 <FormGroup label="New Password" isRequired fieldId="new-password">
-                    <TextInput 
-                        isRequired 
-                        type="password" 
-                        id="new-password" 
-                        name="password" 
-                        value={password} 
-                        onChange={(_event, value) => setPassword(value)} 
+                    <TextInput
+                        isRequired
+                        type="password"
+                        id="new-password"
+                        value={password.value}
+                        onChange={(_event, value) => {
+                            password.handleChange(value);
+                            // Re-validate confirm password when main password changes
+                            if (confirm.touched) {
+                                confirm.handleChange(confirm.value);
+                            }
+                        }}
+                        onBlur={() => password.handleBlur()}
+                        validated={password.error ? 'error' : 'default'}
                     />
+                    {password.error && (
+                        <FormHelperText>
+                            <HelperText>
+                                <HelperTextItem variant="error" icon={<ExclamationTriangleIcon />}>
+                                    {password.error}
+                                </HelperTextItem>
+                            </HelperText>
+                        </FormHelperText>
+                    )}
                 </FormGroup>
+
                 <FormGroup label="Confirm New Password" isRequired fieldId="confirm-password">
-                    <TextInput 
-                        isRequired 
-                        type="password" 
-                        id="confirm-password" 
-                        name="confirm" 
-                        value={confirm} 
-                        onChange={(_event, value) => setConfirm(value)} 
+                    <TextInput
+                        isRequired
+                        type="password"
+                        id="confirm-password"
+                        value={confirm.value}
+                        onChange={(_event, value) => confirm.handleChange(value)}
+                        onBlur={() => confirm.handleBlur()}
+                        validated={confirm.error ? 'error' : 'default'}
                     />
+                    {confirm.error && (
+                        <FormHelperText>
+                            <HelperText>
+                                <HelperTextItem variant="error" icon={<ExclamationTriangleIcon />}>
+                                    {confirm.error}
+                                </HelperTextItem>
+                            </HelperText>
+                        </FormHelperText>
+                    )}
                 </FormGroup>
             </Form>
         </Modal>
     );
 };
-// #endregion
 
-// #region Groups
+// #region Groups - Updated with validation
 interface GroupsTabProps {
     groups: Record<string, GroupData>;
     users: string[];
@@ -852,20 +981,20 @@ const GroupsTab: React.FC<GroupsTabProps> = ({ groups, users, onRefresh }) => {
 
             <CreateGroupModal isOpen={isCreateModalOpen} onClose={() => setCreateModalOpen(false)} onSave={onRefresh} />
             {selectedGroup && <>
-                <ModifyGroupModal 
-                    isOpen={isModifyModalOpen} 
-                    onClose={() => setModifyModalOpen(false)} 
-                    onSave={onRefresh} 
-                    group={selectedGroup} 
-                    groupData={groups[selectedGroup]} 
-                    allUsers={users} 
+                <ModifyGroupModal
+                    isOpen={isModifyModalOpen}
+                    onClose={() => setModifyModalOpen(false)}
+                    onSave={onRefresh}
+                    group={selectedGroup}
+                    groupData={groups[selectedGroup]}
+                    allUsers={users}
                 />
-                <DeleteModal 
-                    isOpen={isDeleteModalOpen} 
-                    onClose={() => setDeleteModalOpen(false)} 
-                    onConfirm={() => smbZfsApi.run(['delete', 'group', selectedGroup]).then(onRefresh).then(() => setDeleteModalOpen(false))} 
-                    item={selectedGroup} 
-                    type="group" 
+                <DeleteModal
+                    isOpen={isDeleteModalOpen}
+                    onClose={() => setDeleteModalOpen(false)}
+                    onConfirm={() => smbZfsApi.run(['delete', 'group', selectedGroup]).then(onRefresh).then(() => setDeleteModalOpen(false))}
+                    item={selectedGroup}
+                    type="group"
                 />
             </>}
         </PageSection>
@@ -930,21 +1059,28 @@ interface CreateGroupModalProps {
 }
 
 const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onClose, onSave }) => {
-    const [formData, setFormData] = useState({ group: '', description: '', users: '' });
+    const groupName = useValidation('', (value) => validateName(value, 'group'));
+    const description = useValidation('', () => ({ isValid: true })); // Description is always valid
+    const users = useValidation('', validateUserList);
+
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const handleChange = (event: React.FormEvent<HTMLInputElement>, value: string) => {
-        const { name } = event.currentTarget;
-        setFormData(prev => ({ ...prev, [name]: value }));
+    const isFormValid = () => {
+        return groupName.isValid && description.isValid && users.isValid && groupName.value;
     };
 
     const handleSave = () => {
+        groupName.handleBlur();
+        users.handleBlur();
+
+        if (!isFormValid()) return;
+
         setLoading(true);
         setError(null);
-        const command = ['create', 'group', formData.group];
-        if (formData.description) command.push('--description', formData.description);
-        if (formData.users) command.push('--users', formData.users);
+        const command = ['create', 'group', groupName.value];
+        if (description.value) command.push('--description', description.value);
+        if (users.value) command.push('--users', users.value);
 
         smbZfsApi.run(command)
             .then(() => { onSave(); onClose(); })
@@ -959,7 +1095,7 @@ const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onClose, on
             isOpen={isOpen}
             onClose={onClose}
             actions={[
-                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading || !formData.group}>
+                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading || !isFormValid()}>
                     Save
                 </Button>,
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
@@ -968,33 +1104,54 @@ const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onClose, on
             {error && <Alert variant="danger" title="Failed to create group">{error}</Alert>}
             <Form>
                 <FormGroup label="Group Name" isRequired fieldId="group-name">
-                    <TextInput 
-                        isRequired 
-                        type="text" 
-                        id="group-name" 
-                        name="group" 
-                        value={formData.group} 
-                        onChange={handleChange} 
+                    <TextInput
+                        isRequired
+                        type="text"
+                        id="group-name"
+                        value={groupName.value}
+                        onChange={(_event, value) => groupName.handleChange(value)}
+                        onBlur={() => groupName.handleBlur()}
+                        validated={groupName.error ? 'error' : 'default'}
                     />
+                    {groupName.error && (
+                        <FormHelperText>
+                            <HelperText>
+                                <HelperTextItem variant="error" icon={<ExclamationTriangleIcon />}>
+                                    {groupName.error}
+                                </HelperTextItem>
+                            </HelperText>
+                        </FormHelperText>
+                    )}
                 </FormGroup>
+
                 <FormGroup label="Description" fieldId="group-desc">
-                    <TextInput 
-                        type="text" 
-                        id="group-desc" 
-                        name="description" 
-                        value={formData.description} 
-                        onChange={handleChange} 
+                    <TextInput
+                        type="text"
+                        id="group-desc"
+                        value={description.value}
+                        onChange={(_event, value) => description.handleChange(value)}
                     />
                 </FormGroup>
+
                 <FormGroup label="Initial Members" fieldId="group-users">
-                    <TextInput 
-                        type="text" 
-                        id="group-users" 
-                        name="users" 
-                        placeholder="comma-separated" 
-                        value={formData.users} 
-                        onChange={handleChange} 
+                    <TextInput
+                        type="text"
+                        id="group-users"
+                        placeholder="comma-separated"
+                        value={users.value}
+                        onChange={(_event, value) => users.handleChange(value)}
+                        onBlur={() => users.handleBlur()}
+                        validated={users.error ? 'error' : 'default'}
                     />
+                    {users.error && (
+                        <FormHelperText>
+                            <HelperText>
+                                <HelperTextItem variant="error" icon={<ExclamationTriangleIcon />}>
+                                    {users.error}
+                                </HelperTextItem>
+                            </HelperText>
+                        </FormHelperText>
+                    )}
                 </FormGroup>
             </Form>
         </Modal>
@@ -1011,17 +1168,27 @@ interface ModifyGroupModalProps {
 }
 
 const ModifyGroupModal: React.FC<ModifyGroupModalProps> = ({ isOpen, onClose, onSave, group, groupData, allUsers }) => {
-    const [addUsers, setAddUsers] = useState('');
-    const [removeUsers, setRemoveUsers] = useState('');
+    const addUsers = useValidation('', validateUserList);
+    const removeUsers = useValidation('', validateUserList);
+
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const isFormValid = () => {
+        return addUsers.isValid && removeUsers.isValid;
+    };
+
     const handleSave = () => {
+        addUsers.handleBlur();
+        removeUsers.handleBlur();
+
+        if (!isFormValid()) return;
+
         setLoading(true);
         setError(null);
         const command = ['modify', 'group', group];
-        if (addUsers) command.push('--add-users', addUsers);
-        if (removeUsers) command.push('--remove-users', removeUsers);
+        if (addUsers.value) command.push('--add-users', addUsers.value);
+        if (removeUsers.value) command.push('--remove-users', removeUsers.value);
 
         smbZfsApi.run(command)
             .then(() => { onSave(); onClose(); })
@@ -1036,7 +1203,7 @@ const ModifyGroupModal: React.FC<ModifyGroupModalProps> = ({ isOpen, onClose, on
             isOpen={isOpen}
             onClose={onClose}
             actions={[
-                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading}>
+                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading || !isFormValid()}>
                     Save
                 </Button>,
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
@@ -1049,33 +1216,54 @@ const ModifyGroupModal: React.FC<ModifyGroupModalProps> = ({ isOpen, onClose, on
                         <p>{groupData.members.join(', ') || 'None'}</p>
                     </Content>
                 </FormGroup>
+
                 <FormGroup label="Add Users" fieldId="add-users">
-                    <TextInput 
-                        type="text" 
-                        id="add-users" 
-                        name="addUsers" 
-                        placeholder="comma-separated" 
-                        value={addUsers} 
-                        onChange={(_event, value) => setAddUsers(value)} 
+                    <TextInput
+                        type="text"
+                        id="add-users"
+                        placeholder="comma-separated"
+                        value={addUsers.value}
+                        onChange={(_event, value) => addUsers.handleChange(value)}
+                        onBlur={() => addUsers.handleBlur()}
+                        validated={addUsers.error ? 'error' : 'default'}
                     />
+                    {addUsers.error && (
+                        <FormHelperText>
+                            <HelperText>
+                                <HelperTextItem variant="error" icon={<ExclamationTriangleIcon />}>
+                                    {addUsers.error}
+                                </HelperTextItem>
+                            </HelperText>
+                        </FormHelperText>
+                    )}
                 </FormGroup>
+
                 <FormGroup label="Remove Users" fieldId="remove-users">
-                    <TextInput 
-                        type="text" 
-                        id="remove-users" 
-                        name="removeUsers" 
-                        placeholder="comma-separated" 
-                        value={removeUsers} 
-                        onChange={(_event, value) => setRemoveUsers(value)} 
+                    <TextInput
+                        type="text"
+                        id="remove-users"
+                        placeholder="comma-separated"
+                        value={removeUsers.value}
+                        onChange={(_event, value) => removeUsers.handleChange(value)}
+                        onBlur={() => removeUsers.handleBlur()}
+                        validated={removeUsers.error ? 'error' : 'default'}
                     />
+                    {removeUsers.error && (
+                        <FormHelperText>
+                            <HelperText>
+                                <HelperTextItem variant="error" icon={<ExclamationTriangleIcon />}>
+                                    {removeUsers.error}
+                                </HelperTextItem>
+                            </HelperText>
+                        </FormHelperText>
+                    )}
                 </FormGroup>
             </Form>
         </Modal>
     );
 };
-// #endregion
 
-// #region Shares
+// #region Shares - Updated with validation
 interface SharesTabProps {
     shares: Record<string, ShareData>;
     pools: string[];
@@ -1101,26 +1289,26 @@ const SharesTab: React.FC<SharesTabProps> = ({ shares, pools, onRefresh }) => {
             </div>
             <SharesTable shares={shares} onAction={handleAction} />
 
-            <CreateShareModal 
-                isOpen={isCreateModalOpen} 
-                onClose={() => setCreateModalOpen(false)} 
-                onSave={onRefresh} 
-                pools={pools} 
+            <CreateShareModal
+                isOpen={isCreateModalOpen}
+                onClose={() => setCreateModalOpen(false)}
+                onSave={onRefresh}
+                pools={pools}
             />
             {selectedShare && <>
-                <ModifyShareModal 
-                    isOpen={isModifyModalOpen} 
-                    onClose={() => setModifyModalOpen(false)} 
-                    onSave={onRefresh} 
-                    share={selectedShare} 
-                    shareData={shares[selectedShare]} 
-                    pools={pools} 
+                <ModifyShareModal
+                    isOpen={isModifyModalOpen}
+                    onClose={() => setModifyModalOpen(false)}
+                    onSave={onRefresh}
+                    share={selectedShare}
+                    shareData={shares[selectedShare]}
+                    pools={pools}
                 />
-                <DeleteShareModal 
-                    isOpen={isDeleteModalOpen} 
-                    onClose={() => setDeleteModalOpen(false)} 
-                    onSave={onRefresh} 
-                    share={selectedShare} 
+                <DeleteShareModal
+                    isOpen={isDeleteModalOpen}
+                    onClose={() => setDeleteModalOpen(false)}
+                    onSave={onRefresh}
+                    share={selectedShare}
                 />
             </>}
         </PageSection>
@@ -1188,41 +1376,58 @@ interface CreateShareModalProps {
 }
 
 const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, onSave, pools }) => {
-    const [formData, setFormData] = useState({
-        share: '', 
-        dataset: '', 
-        pool: pools[0] || '', 
-        comment: '', 
-        owner: 'root',
-        group: 'smb_users', 
-        perms: '775', 
-        validUsers: '', 
-        readonly: false, 
-        noBrowse: false, 
-        quota: ''
-    });
+    const shareName = useValidation('', (value) => validateName(value, 'share'));
+    const dataset = useValidation('', validateDatasetPath);
+    const comment = useValidation('', () => ({ isValid: true }));
+    const owner = useValidation('root', (value) => validateName(value, 'owner'));
+    const group = useValidation('smb_users', (value) => validateName(value, 'group'));
+    const permissions = useValidation('775', validatePermissions);
+    const validUsers = useValidation('', validateUserList);
+    const quota = useValidation('', validateQuota);
+
+    const [pool, setPool] = useState(pools[0] || '');
+    const [readonly, setReadonly] = useState(false);
+    const [noBrowse, setNoBrowse] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const handleChange = (value: string, event: React.FormEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const { name, type } = event.currentTarget;
-        const checked = (event.currentTarget as HTMLInputElement).checked;
-        setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+    const isFormValid = () => {
+        return shareName.isValid &&
+               dataset.isValid &&
+               comment.isValid &&
+               owner.isValid &&
+               group.isValid &&
+               permissions.isValid &&
+               validUsers.isValid &&
+               quota.isValid &&
+               shareName.value &&
+               dataset.value;
     };
 
     const handleSave = () => {
+        // Validate all fields
+        shareName.handleBlur();
+        dataset.handleBlur();
+        owner.handleBlur();
+        group.handleBlur();
+        permissions.handleBlur();
+        validUsers.handleBlur();
+        quota.handleBlur();
+
+        if (!isFormValid()) return;
+
         setLoading(true);
         setError(null);
-        const command = ['create', 'share', formData.share, '--dataset', formData.dataset];
-        if (formData.pool) command.push('--pool', formData.pool);
-        if (formData.comment) command.push('--comment', formData.comment);
-        if (formData.owner) command.push('--owner', formData.owner);
-        if (formData.group) command.push('--group', formData.group);
-        if (formData.perms) command.push('--perms', formData.perms);
-        if (formData.validUsers) command.push('--valid-users', formData.validUsers);
-        if (formData.readonly) command.push('--readonly');
-        if (formData.noBrowse) command.push('--no-browse');
-        if (formData.quota) command.push('--quota', formData.quota);
+        const command = ['create', 'share', shareName.value, '--dataset', dataset.value];
+        if (pool) command.push('--pool', pool);
+        if (comment.value) command.push('--comment', comment.value);
+        if (owner.value) command.push('--owner', owner.value);
+        if (group.value) command.push('--group', group.value);
+        if (permissions.value) command.push('--perms', permissions.value);
+        if (validUsers.value) command.push('--valid-users', validUsers.value);
+        if (readonly) command.push('--readonly');
+        if (noBrowse) command.push('--no-browse');
+        if (quota.value) command.push('--quota', quota.value);
 
         smbZfsApi.run(command)
             .then(() => { onSave(); onClose(); })
@@ -1237,11 +1442,11 @@ const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, on
             isOpen={isOpen}
             onClose={onClose}
             actions={[
-                <Button 
-                    key="save" 
-                    variant="primary" 
-                    onClick={handleSave} 
-                    isDisabled={loading || !formData.share || !formData.dataset}
+                <Button
+                    key="save"
+                    variant="primary"
+                    onClick={handleSave}
+                    isDisabled={loading || !isFormValid()}
                 >
                     Save
                 </Button>,
@@ -1253,36 +1458,55 @@ const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, on
                 <Grid hasGutter>
                     <GridItem span={6}>
                         <FormGroup label="Share Name" isRequired fieldId="share-name">
-                            <TextInput 
-                                isRequired 
-                                type="text" 
-                                id="share-name" 
-                                name="share" 
-                                value={formData.share} 
-                                onChange={handleChange} 
+                            <TextInput
+                                isRequired
+                                type="text"
+                                id="share-name"
+                                value={shareName.value}
+                                onChange={(_event, value) => shareName.handleChange(value)}
+                                onBlur={() => shareName.handleBlur()}
+                                validated={shareName.error ? 'error' : 'default'}
                             />
+                            {shareName.error && (
+                                <FormHelperText>
+                                    <HelperText>
+                                        <HelperTextItem variant="error" icon={<ExclamationTriangleIcon />}>
+                                            {shareName.error}
+                                        </HelperTextItem>
+                                    </HelperText>
+                                </FormHelperText>
+                            )}
                         </FormGroup>
                     </GridItem>
                     <GridItem span={6}>
                         <FormGroup label="ZFS Dataset Path" isRequired fieldId="share-dataset">
-                            <TextInput 
-                                isRequired 
-                                type="text" 
-                                id="share-dataset" 
-                                name="dataset" 
-                                placeholder="e.g., data/projects" 
-                                value={formData.dataset} 
-                                onChange={handleChange} 
+                            <TextInput
+                                isRequired
+                                type="text"
+                                id="share-dataset"
+                                placeholder="e.g., data/projects"
+                                value={dataset.value}
+                                onChange={(_event, value) => dataset.handleChange(value)}
+                                onBlur={() => dataset.handleBlur()}
+                                validated={dataset.error ? 'error' : 'default'}
                             />
+                            {dataset.error && (
+                                <FormHelperText>
+                                    <HelperText>
+                                        <HelperTextItem variant="error" icon={<ExclamationTriangleIcon />}>
+                                            {dataset.error}
+                                        </HelperTextItem>
+                                    </HelperText>
+                                </FormHelperText>
+                            )}
                         </FormGroup>
                     </GridItem>
                     <GridItem span={6}>
                         <FormGroup label="ZFS Pool" fieldId="share-pool">
-                            <select 
-                                className="pf-v5-c-form-control" 
-                                name="pool" 
-                                value={formData.pool} 
-                                onChange={(e) => handleChange(e.target.value, e)}
+                            <select
+                                className="pf-v5-c-form-control"
+                                value={pool}
+                                onChange={(e) => setPool(e.target.value)}
                             >
                                 {pools.map(p => <option key={p} value={p}>{p}</option>)}
                             </select>
@@ -1290,87 +1514,134 @@ const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, on
                     </GridItem>
                     <GridItem span={6}>
                         <FormGroup label="Comment" fieldId="share-comment">
-                            <TextInput 
-                                type="text" 
-                                id="share-comment" 
-                                name="comment" 
-                                value={formData.comment} 
-                                onChange={handleChange} 
+                            <TextInput
+                                type="text"
+                                id="share-comment"
+                                value={comment.value}
+                                onChange={(_event, value) => comment.handleChange(value)}
                             />
                         </FormGroup>
                     </GridItem>
                     <GridItem span={6}>
                         <FormGroup label="Owner (user)" fieldId="share-owner">
-                            <TextInput 
-                                type="text" 
-                                id="share-owner" 
-                                name="owner" 
-                                value={formData.owner} 
-                                onChange={handleChange} 
+                            <TextInput
+                                type="text"
+                                id="share-owner"
+                                value={owner.value}
+                                onChange={(_event, value) => owner.handleChange(value)}
+                                onBlur={() => owner.handleBlur()}
+                                validated={owner.error ? 'error' : 'default'}
                             />
+                            {owner.error && (
+                                <FormHelperText>
+                                    <HelperText>
+                                        <HelperTextItem variant="error" icon={<ExclamationTriangleIcon />}>
+                                            {owner.error}
+                                        </HelperTextItem>
+                                    </HelperText>
+                                </FormHelperText>
+                            )}
                         </FormGroup>
                     </GridItem>
                     <GridItem span={6}>
                         <FormGroup label="Owner (group)" fieldId="share-group">
-                            <TextInput 
-                                type="text" 
-                                id="share-group" 
-                                name="group" 
-                                value={formData.group} 
-                                onChange={handleChange} 
+                            <TextInput
+                                type="text"
+                                id="share-group"
+                                value={group.value}
+                                onChange={(_event, value) => group.handleChange(value)}
+                                onBlur={() => group.handleBlur()}
+                                validated={group.error ? 'error' : 'default'}
                             />
+                            {group.error && (
+                                <FormHelperText>
+                                    <HelperText>
+                                        <HelperTextItem variant="error" icon={<ExclamationTriangleIcon />}>
+                                            {group.error}
+                                        </HelperTextItem>
+                                    </HelperText>
+                                </FormHelperText>
+                            )}
                         </FormGroup>
                     </GridItem>
                     <GridItem span={6}>
                         <FormGroup label="Permissions" fieldId="share-perms">
-                            <TextInput 
-                                type="text" 
-                                id="share-perms" 
-                                name="perms" 
-                                value={formData.perms} 
-                                onChange={handleChange} 
+                            <TextInput
+                                type="text"
+                                id="share-perms"
+                                value={permissions.value}
+                                onChange={(_event, value) => permissions.handleChange(value)}
+                                onBlur={() => permissions.handleBlur()}
+                                validated={permissions.error ? 'error' : 'default'}
                             />
+                            {permissions.error && (
+                                <FormHelperText>
+                                    <HelperText>
+                                        <HelperTextItem variant="error" icon={<ExclamationTriangleIcon />}>
+                                            {permissions.error}
+                                        </HelperTextItem>
+                                    </HelperText>
+                                </FormHelperText>
+                            )}
                         </FormGroup>
                     </GridItem>
                     <GridItem span={6}>
                         <FormGroup label="Valid Users/Groups" fieldId="share-valid-users">
-                            <TextInput 
-                                type="text" 
-                                id="share-valid-users" 
-                                name="validUsers" 
-                                placeholder="user1,@group1" 
-                                value={formData.validUsers} 
-                                onChange={handleChange} 
+                            <TextInput
+                                type="text"
+                                id="share-valid-users"
+                                placeholder="user1,@group1"
+                                value={validUsers.value}
+                                onChange={(_event, value) => validUsers.handleChange(value)}
+                                onBlur={() => validUsers.handleBlur()}
+                                validated={validUsers.error ? 'error' : 'default'}
                             />
+                            {validUsers.error && (
+                                <FormHelperText>
+                                    <HelperText>
+                                        <HelperTextItem variant="error" icon={<ExclamationTriangleIcon />}>
+                                            {validUsers.error}
+                                        </HelperTextItem>
+                                    </HelperText>
+                                </FormHelperText>
+                            )}
                         </FormGroup>
                     </GridItem>
                     <GridItem span={6}>
                         <FormGroup label="Quota" fieldId="share-quota">
-                            <TextInput 
-                                type="text" 
-                                id="share-quota" 
-                                name="quota" 
-                                placeholder="e.g., 100G" 
-                                value={formData.quota} 
-                                onChange={handleChange} 
+                            <TextInput
+                                type="text"
+                                id="share-quota"
+                                placeholder="e.g., 100G"
+                                value={quota.value}
+                                onChange={(_event, value) => quota.handleChange(value)}
+                                onBlur={() => quota.handleBlur()}
+                                validated={quota.error ? 'error' : 'default'}
                             />
+                            {quota.error && (
+                                <FormHelperText>
+                                    <HelperText>
+                                        <HelperTextItem variant="error" icon={<ExclamationTriangleIcon />}>
+                                            {quota.error}
+                                        </HelperTextItem>
+                                    </HelperText>
+                                </FormHelperText>
+                            )}
                         </FormGroup>
                     </GridItem>
                     <GridItem span={6}>
                         <FormGroup fieldId="share-options">
-                            <Checkbox 
-                                label="Make share read-only" 
-                                id="share-readonly" 
-                                name="readonly" 
-                                isChecked={formData.readonly} 
-                                onChange={handleChange} 
+                            <Checkbox
+                                label="Make share read-only"
+                                id="share-readonly"
+                                isChecked={readonly}
+                                onChange={(_event, checked) => setReadonly(checked)}
                             />
-                            <Checkbox 
-                                label="Hide share from network browse" 
-                                id="share-no-browse" 
-                                name="noBrowse" 
-                                isChecked={formData.noBrowse} 
-                                onChange={handleChange} 
+                            <Checkbox
+                                label="Hide share from network browse"
+                                id="share-no-browse"
+                                isChecked={noBrowse}
+                                onChange={(_event, checked) => setNoBrowse(checked)}
                             />
                         </FormGroup>
                     </GridItem>
@@ -1390,17 +1661,24 @@ interface ModifyShareModalProps {
 }
 
 const ModifyShareModal: React.FC<ModifyShareModalProps> = ({ isOpen, onClose, onSave, share, shareData, pools }) => {
-    // This would be a large form. For brevity, we'll implement a few key fields.
-    // A full implementation would mirror the create form.
-    const [comment, setComment] = useState(shareData.smb_config.comment || '');
-    const [quota, setQuota] = useState(shareData.dataset.quota || '');
+    const comment = useValidation(shareData.smb_config.comment || '', () => ({ isValid: true }));
+    const quota = useValidation(shareData.dataset.quota || '', validateQuota);
+
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const isFormValid = () => {
+        return comment.isValid && quota.isValid;
+    };
+
     const handleSave = () => {
+        quota.handleBlur();
+
+        if (!isFormValid()) return;
+
         setLoading(true);
         setError(null);
-        const command = ['modify', 'share', share, '--comment', comment, '--quota', quota || 'none'];
+        const command = ['modify', 'share', share, '--comment', comment.value, '--quota', quota.value || 'none'];
 
         smbZfsApi.run(command)
             .then(() => { onSave(); onClose(); })
@@ -1415,7 +1693,7 @@ const ModifyShareModal: React.FC<ModifyShareModalProps> = ({ isOpen, onClose, on
             isOpen={isOpen}
             onClose={onClose}
             actions={[
-                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading}>
+                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading || !isFormValid()}>
                     Save
                 </Button>,
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
@@ -1424,22 +1702,31 @@ const ModifyShareModal: React.FC<ModifyShareModalProps> = ({ isOpen, onClose, on
             {error && <Alert variant="danger" title="Failed to modify share">{error}</Alert>}
             <Form>
                 <FormGroup label="Comment" fieldId="mod-share-comment">
-                    <TextInput 
-                        type="text" 
-                        id="mod-share-comment" 
-                        name="comment" 
-                        value={comment} 
-                        onChange={(_event, value) => setComment(value)} 
+                    <TextInput
+                        type="text"
+                        id="mod-share-comment"
+                        value={comment.value}
+                        onChange={(_event, value) => comment.handleChange(value)}
                     />
                 </FormGroup>
                 <FormGroup label="Quota" fieldId="mod-share-quota">
-                    <TextInput 
-                        type="text" 
-                        id="mod-share-quota" 
-                        name="quota" 
-                        value={quota} 
-                        onChange={(_event, value) => setQuota(value)} 
+                    <TextInput
+                        type="text"
+                        id="mod-share-quota"
+                        value={quota.value}
+                        onChange={(_event, value) => quota.handleChange(value)}
+                        onBlur={() => quota.handleBlur()}
+                        validated={quota.error ? 'error' : 'default'}
                     />
+                    {quota.error && (
+                        <FormHelperText>
+                            <HelperText>
+                                <HelperTextItem variant="error" icon={<ExclamationTriangleIcon />}>
+                                    {quota.error}
+                                </HelperTextItem>
+                            </HelperText>
+                        </FormHelperText>
+                    )}
                 </FormGroup>
                 <Content>
                     <p><small>Note: This is a simplified modification dialog. A full implementation would include all modifiable properties.</small></p>
@@ -1488,19 +1775,17 @@ const DeleteShareModal: React.FC<DeleteShareModalProps> = ({ isOpen, onClose, on
         >
             {error && <Alert variant="danger" title="Failed to delete share">{error}</Alert>}
             <p>Are you sure you want to delete share <strong>{share}</strong>?</p>
-            <Checkbox 
-                label="Permanently delete the share's ZFS dataset." 
-                id="delete-data" 
-                name="deleteData" 
-                isChecked={deleteData} 
-                onChange={(_event, checked) => setDeleteData(checked)} 
+            <Checkbox
+                label="Permanently delete the share's ZFS dataset."
+                id="delete-data"
+                isChecked={deleteData}
+                onChange={(_event, checked) => setDeleteData(checked)}
             />
         </Modal>
     );
 };
-// #endregion
 
-// #region Password Tab (for non-root)
+// #region Password Tab (for non-root) - Updated with validation
 interface PasswordTabProps {
     user: string;
     onRefresh: () => void;
@@ -1519,13 +1804,179 @@ const PasswordTab: React.FC<PasswordTabProps> = ({ user, onRefresh }) => {
                     </Button>
                 </CardBody>
             </Card>
-            <ChangePasswordModal 
-                isOpen={isPasswordModalOpen} 
-                onClose={() => setPasswordModalOpen(false)} 
-                onSave={onRefresh} 
-                user={user} 
+            <ChangePasswordModal
+                isOpen={isPasswordModalOpen}
+                onClose={() => setPasswordModalOpen(false)}
+                onSave={onRefresh}
+                user={user}
             />
         </PageSection>
     );
 };
-// #endregion
+// Validation utilities
+interface ValidationResult {
+    isValid: boolean;
+    error?: string;
+}
+
+const validateName = (name: string, itemType: string): ValidationResult => {
+    if (!name) {
+        return { isValid: false, error: `${itemType} name is required.` };
+    }
+
+    const itemTypeLower = itemType.toLowerCase();
+
+    if (['user', 'group', 'owner'].includes(itemTypeLower)) {
+        if (!/^[a-z_][a-z0-9_-]{0,31}$/.test(name)) {
+            return {
+                isValid: false,
+                error: `${itemType.charAt(0).toUpperCase() + itemType.slice(1)} name '${name}' is invalid. Must be lowercase, start with letter/underscore, max 32 chars.`
+            };
+        }
+    } else if (itemTypeLower === 'share') {
+        if (!/^[a-zA-Z0-9][a-zA-Z0-9_.\-:]{0,79}$/.test(name) ||
+            name.split(/[._\-:]/).some(component => component === "")) {
+            return {
+                isValid: false,
+                error: `Share name '${name}' is invalid. Must start with letter/number, no empty components, max 80 chars.`
+            };
+        }
+    } else if (['server_name', 'workgroup'].includes(itemTypeLower)) {
+        if (!/^(?!-)[A-Za-z0-9-]{1,15}(?<!-)$/.test(name)) {
+            return {
+                isValid: false,
+                error: `${itemType.charAt(0).toUpperCase() + itemType.slice(1)} name '${name}' is invalid. 1-15 chars, no leading/trailing hyphens.`
+            };
+        }
+    } else {
+        if (!/^[a-zA-Z0-9._-]+$/.test(name)) {
+            return {
+                isValid: false,
+                error: `${itemType.charAt(0).toUpperCase() + itemType.slice(1)} name '${name}' contains invalid characters.`
+            };
+        }
+    }
+
+    return { isValid: true };
+};
+
+const validateQuota = (quota: string): ValidationResult => {
+    if (!quota) {
+        return { isValid: true };
+    }
+
+    if (!/^none$|^\d+\.?\d*[kmgtpez]?$/i.test(quota)) {
+        return {
+            isValid: false,
+            error: "Quota must be 'none' or numeric value with unit (e.g., 512M, 120G, 1.5T)"
+        };
+    }
+
+    return { isValid: true };
+};
+
+const validatePassword = (password: string, confirm?: string): ValidationResult => {
+    if (!password) {
+        return { isValid: false, error: "Password is required." };
+    }
+
+    if (confirm !== undefined && password !== confirm) {
+        return { isValid: false, error: "Passwords do not match." };
+    }
+
+    return { isValid: true };
+};
+
+const validatePermissions = (perms: string): ValidationResult => {
+    if (!perms) {
+        return { isValid: true };
+    }
+
+    if (!/^[0-7]{3,4}$/.test(perms)) {
+        return {
+            isValid: false,
+            error: "Permissions must be in octal format (e.g., 755, 644)."
+        };
+    }
+
+    return { isValid: true };
+};
+
+const validateUserList = (users: string): ValidationResult => {
+    if (!users) {
+        return { isValid: true };
+    }
+
+    const userList = users.split(',').map(u => u.trim()).filter(u => u);
+
+    for (const user of userList) {
+        const userName = user.startsWith('@') ? user.slice(1) : user;
+        const validation = validateName(userName, user.startsWith('@') ? 'group' : 'user');
+        if (!validation.isValid) {
+            return {
+                isValid: false,
+                error: `Invalid ${user.startsWith('@') ? 'group' : 'user'} in list: ${validation.error}`
+            };
+        }
+    }
+
+    return { isValid: true };
+};
+
+const validateDatasetPath = (path: string): ValidationResult => {
+    if (!path) {
+        return { isValid: false, error: "Dataset path is required." };
+    }
+
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9_\-\/]*[a-zA-Z0-9]$/.test(path) && path.length > 1) {
+        return {
+            isValid: false,
+            error: "Dataset path must contain only alphanumeric characters, underscores, hyphens, and forward slashes."
+        };
+    }
+
+    if (path.includes('//') || path.startsWith('/') || path.endsWith('/')) {
+        return {
+            isValid: false,
+            error: "Dataset path cannot start/end with '/' or contain consecutive '//' characters."
+        };
+    }
+
+    return { isValid: true };
+};
+
+// Validation state hook
+const useValidation = (initialValue = '', validator: (value: string, ...args: any[]) => ValidationResult) => {
+    const [value, setValue] = useState(initialValue);
+    const [validation, setValidation] = useState<ValidationResult>({ isValid: true });
+    const [touched, setTouched] = useState(false);
+
+    const validateValue = useCallback((newValue: string, ...args: any[]) => {
+        const result = validator(newValue, ...args);
+        setValidation(result);
+        return result;
+    }, [validator]);
+
+    const handleChange = useCallback((newValue: string, ...args: any[]) => {
+        setValue(newValue);
+        setTouched(true);
+        return validateValue(newValue, ...args);
+    }, [validateValue]);
+
+    const handleBlur = useCallback((...args: any[]) => {
+        setTouched(true);
+        return validateValue(value, ...args);
+    }, [value, validateValue]);
+
+    return {
+        value,
+        setValue,
+        validation,
+        touched,
+        isValid: validation.isValid,
+        error: touched ? validation.error : undefined,
+        handleChange,
+        handleBlur,
+        validate: () => validateValue(value)
+    };
+};
