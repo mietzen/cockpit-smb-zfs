@@ -15,7 +15,6 @@ import {
     ModalVariant,
     Page,
     PageSection,
-    PageSectionVariants,
     Spinner,
     Tab,
     Tabs,
@@ -27,19 +26,9 @@ import {
     Content,
     FormHelperText,
     HelperText,
-    HelperTextItem,
+    HelperTextItem
 } from "@patternfly/react-core";
-import {
-    Table,
-    Thead,
-    Tbody,
-    Tr,
-    Th,
-    Td,
-    ActionsColumn,
-    IAction,
-} from "@patternfly/react-table";
-import { CubesIcon, ExclamationTriangleIcon } from "@patternfly/react-icons";
+import { ExclamationTriangleIcon } from "@patternfly/react-icons";
 
 // Type definitions (keeping existing ones)
 interface UserData {
@@ -185,7 +174,7 @@ const App = () => {
     }, []);
 
     useEffect(() => {
-        const permission = cockpit.permission();
+        const permission = (cockpit as any).permission ? (cockpit as any).permission() : ({ is_superuser: false, addEventListener() {}, removeEventListener() {} } as any);
         const onChanged = () => {
             setIsRoot(permission.is_superuser || false);
         };
@@ -207,7 +196,7 @@ const App = () => {
     };
 
     if (loading) {
-        return <Page><PageSection variant={PageSectionVariants.light}><Spinner /></PageSection></Page>;
+        return <Page><PageSection variant="default"><Spinner /></PageSection></Page>;
     }
 
     if (error) {
@@ -217,7 +206,7 @@ const App = () => {
                     <Alert
                         variant="danger"
                         title="Error Loading Plugin"
-                        actionClose={{ title: 'Close', onClose: () => setError(null) }}
+                        actionClose={<Button variant="plain" onClick={() => setError(null)} aria-label="Close">Close</Button>}
                         actionLinks={
                             <Button variant="primary" onClick={refreshState}>Retry</Button>
                         }
@@ -234,7 +223,6 @@ const App = () => {
             <Page>
                 <PageSection>
                     <EmptyState>
-                        <CubesIcon size="xl" />
                         <Title headingLevel="h4" size="lg">No Data</Title>
                         <EmptyStateBody>Could not retrieve data from smb-zfs.</EmptyStateBody>
                     </EmptyState>
@@ -275,7 +263,7 @@ const App = () => {
 
     return (
         <Page>
-            <PageSection variant={PageSectionVariants.light}>
+            <PageSection variant="default">
                 <Title headingLevel="h1">Samba on ZFS Management</Title>
                 <Content>
                     <p>A tool to manage Samba on a ZFS-backed system.</p>
@@ -300,7 +288,7 @@ interface InitialSetupProps {
 const InitialSetup: React.FC<InitialSetupProps> = ({ onSetupComplete }) => {
     const primaryPool = useValidation('', (value) => value ? { isValid: true } : { isValid: false, error: 'Primary pool is required' });
     const secondaryPools = useValidation('', (value) => ({ isValid: true }));
-    const serverName = useValidation(cockpit.host, (value) => validateName(value, 'server_name'));
+    const serverName = useValidation(((cockpit as any).host as string) || '', (value) => validateName(value, 'server_name'));
     const workgroup = useValidation('WORKGROUP', (value) => validateName(value, 'workgroup'));
     const defaultHomeQuota = useValidation('', validateQuota);
 
@@ -347,7 +335,7 @@ const InitialSetup: React.FC<InitialSetupProps> = ({ onSetupComplete }) => {
 
     return (
         <Page>
-            <PageSection variant="light">
+            <PageSection variant="default">
                 <Title headingLevel="h1">Initial Samba-ZFS Setup</Title>
                 <p>This system has not been configured yet. Please provide the initial setup parameters.</p>
             </PageSection>
@@ -543,14 +531,20 @@ const DeleteModal: React.FC<DeleteModalProps> = ({ isOpen, onClose, onConfirm, i
         isOpen={isOpen}
         onClose={onClose}
         actions={[
-            <Button key="confirm" variant="danger" onClick={onConfirm} isDisabled={loading}>
+            <Button key="confirm" variant="danger" onClick={onConfirm} isDisabled={!!loading}>
                 {loading ? <Spinner size="sm" /> : 'Delete'}
             </Button>,
             <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
-        ]}
+        ] as any}
     >
         {error && <Alert variant="danger" title={`Failed to delete ${type}`}>{error}</Alert>}
         Are you sure you want to delete the {type} <strong>{item}</strong>? This action cannot be undone.
+        <div className="pf-v5-c-modal-box__footer">
+            <Button key="confirm" variant="danger" onClick={onConfirm} isDisabled={!!loading}>
+                {loading ? <Spinner size="sm" /> : 'Delete'}
+            </Button>
+            <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
+        </div>
     </Modal>
 );
 
@@ -628,35 +622,42 @@ const UsersTable: React.FC<UsersTableProps> = ({ users, onAction, isReadOnly = f
         ]
     }));
 
-    const actions = (user: string): IAction[] => [
+    const actions = (user: string) => [
         { title: 'Modify Home Quota', onClick: () => onAction?.('modify', user) },
         { title: 'Change Password', onClick: () => onAction?.('password', user) },
-        { isSeparator: true },
+        { isSeparator: true as const },
         { title: 'Delete User', onClick: () => onAction?.('delete', user) },
     ];
 
     return (
-        <Table aria-label="Users Table">
-            <Thead>
-                <Tr>
-                    {columns.map((col, i) => <Th key={i}>{col}</Th>)}
-                </Tr>
-            </Thead>
-            <Tbody>
+        <div className="pf-v5-c-table pf-m-grid-md" role="grid" aria-label="Users Table">
+            <div className="pf-v5-c-table__thead" role="rowgroup">
+                <div className="pf-v5-c-table__tr" role="row">
+                    {columns.map((col, i) => (
+                        <div key={i} role="columnheader" className="pf-v5-c-table__th">{col}</div>
+                    ))}
+                    {!isReadOnly && <div className="pf-v5-c-table__th" />}
+                </div>
+            </div>
+            <div className="pf-v5-c-table__tbody" role="rowgroup">
                 {rows.map(row => (
-                    <Tr key={row.name}>
+                    <div key={row.name} className="pf-v5-c-table__tr" role="row">
                         {row.cells.map((cell, i) => (
-                            <Td key={`${row.name}-${i}`} dataLabel={columns[i]}>{cell}</Td>
+                            <div key={`${row.name}-${i}`} role="cell" className="pf-v5-c-table__td">{cell}</div>
                         ))}
                         {!isReadOnly && onAction && (
-                            <Td isActionCell>
-                                <ActionsColumn items={actions(row.name)} />
-                            </Td>
+                            <div role="cell" className="pf-v5-c-table__td">
+                                <div className="pf-v5-c-dropdown">
+                                    <button className="pf-v5-c-button pf-m-primary" type="button" onClick={() => onAction?.('modify', row.name)}>Modify</button>
+                                    <button className="pf-v5-c-button pf-m-secondary" type="button" onClick={() => onAction?.('password', row.name)}>Password</button>
+                                    <button className="pf-v5-c-button pf-m-danger" type="button" onClick={() => onAction?.('delete', row.name)}>Delete</button>
+                                </div>
+                            </div>
                         )}
-                    </Tr>
+                    </div>
                 ))}
-            </Tbody>
-        </Table>
+            </div>
+        </div>
     );
 };
 
@@ -708,12 +709,6 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onSa
             title="Create New User"
             isOpen={isOpen}
             onClose={onClose}
-            actions={[
-                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading || !isFormValid()}>
-                    {loading ? <Spinner size="sm" /> : 'Save'}
-                </Button>,
-                <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
-            ]}
         >
             {error && <Alert variant="danger" title="Failed to create user">{error}</Alert>}
             <Form>
@@ -794,6 +789,12 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onSa
                     />
                 </FormGroup>
             </Form>
+            <div className="pf-v5-c-modal-box__footer">
+                <Button key="save" variant="primary" onClick={handleSave} isDisabled={!!loading || !isFormValid()}>
+                    {loading ? <Spinner size="sm" /> : 'Save'}
+                </Button>
+                <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
+            </div>
         </Modal>
     );
 };
@@ -829,20 +830,20 @@ const ModifyUserModal: React.FC<ModifyUserModalProps> = ({ isOpen, onClose, onSa
             title={`Modify Home Quota for ${user}`}
             isOpen={isOpen}
             onClose={onClose}
-            actions={[
-                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading || !quota.isValid}>
-                    {loading ? <Spinner size="sm" /> : 'Save'}
-                </Button>,
-                <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
-            ]}
         >
             {error && <Alert variant="danger" title="Failed to modify quota">{error}</Alert>}
             <Form>
                 <FormGroup
                     label="New Quota"
-                    helperText="e.g., 20G. Leave empty or use 'none' to remove."
                     fieldId="user-quota"
                 >
+                    <FormHelperText>
+                        <HelperText>
+                            <HelperTextItem>
+                                e.g., 20G. Leave empty or use 'none' to remove.
+                            </HelperTextItem>
+                        </HelperText>
+                    </FormHelperText>
                     <TextInput
                         type="text"
                         id="user-quota"
@@ -862,6 +863,12 @@ const ModifyUserModal: React.FC<ModifyUserModalProps> = ({ isOpen, onClose, onSa
                     )}
                 </FormGroup>
             </Form>
+            <div className="pf-v5-c-modal-box__footer">
+                <Button key="save" variant="primary" onClick={handleSave} isDisabled={!!loading || !quota.isValid}>
+                    {loading ? <Spinner size="sm" /> : 'Save'}
+                </Button>
+                <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
+            </div>
         </Modal>
     );
 };
@@ -896,12 +903,6 @@ const DeleteUserModal: React.FC<DeleteUserModalProps> = ({ isOpen, onClose, onSa
             title={`Delete User ${user}`}
             isOpen={isOpen}
             onClose={onClose}
-            actions={[
-                <Button key="confirm" variant="danger" onClick={handleConfirm} isDisabled={loading}>
-                    {loading ? <Spinner size="sm" /> : 'Delete'}
-                </Button>,
-                <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
-            ]}
         >
             {error && <Alert variant="danger" title="Failed to delete user">{error}</Alert>}
             <p>Are you sure you want to delete user <strong>{user}</strong>?</p>
@@ -911,6 +912,12 @@ const DeleteUserModal: React.FC<DeleteUserModalProps> = ({ isOpen, onClose, onSa
                 isChecked={deleteData}
                 onChange={(_event, checked) => setDeleteData(checked)}
             />
+            <div className="pf-v5-c-modal-box__footer">
+                <Button key="confirm" variant="danger" onClick={handleConfirm} isDisabled={!!loading}>
+                    {loading ? <Spinner size="sm" /> : 'Delete'}
+                </Button>
+                <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
+            </div>
         </Modal>
     );
 };
@@ -955,17 +962,6 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
             title={`Change Password for ${user}`}
             isOpen={isOpen}
             onClose={onClose}
-            actions={[
-                <Button
-                    key="save"
-                    variant="primary"
-                    onClick={handleSave}
-                    isDisabled={loading || !isFormValid()}
-                >
-                    Set Password
-                </Button>,
-                <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
-            ]}
         >
             {error && <Alert variant="danger" title="Password Change Failed">{error}</Alert>}
             <Form>
@@ -1017,6 +1013,17 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
                     )}
                 </FormGroup>
             </Form>
+            <div className="pf-v5-c-modal-box__footer">
+                <Button
+                    key="save"
+                    variant="primary"
+                    onClick={handleSave}
+                    isDisabled={!!loading || !isFormValid()}
+                >
+                    Set Password
+                </Button>
+                <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
+            </div>
         </Modal>
     );
 };
@@ -1089,34 +1096,40 @@ const GroupsTable: React.FC<GroupsTableProps> = ({ groups, onAction, isReadOnly 
         ]
     }));
 
-    const actions = (group: string): IAction[] => [
+    const actions = (group: string) => [
         { title: 'Modify Members', onClick: () => onAction?.('modify', group) },
-        { isSeparator: true },
+        { isSeparator: true as const },
         { title: 'Delete Group', onClick: () => onAction?.('delete', group) },
     ];
 
     return (
-        <Table aria-label="Groups Table">
-            <Thead>
-                <Tr>
-                    {columns.map((col, i) => <Th key={i}>{col}</Th>)}
-                </Tr>
-            </Thead>
-            <Tbody>
+        <div className="pf-v5-c-table pf-m-grid-md" role="grid" aria-label="Groups Table">
+            <div className="pf-v5-c-table__thead" role="rowgroup">
+                <div className="pf-v5-c-table__tr" role="row">
+                    {columns.map((col, i) => (
+                        <div key={i} role="columnheader" className="pf-v5-c-table__th">{col}</div>
+                    ))}
+                    {!isReadOnly && <div className="pf-v5-c-table__th" />}
+                </div>
+            </div>
+            <div className="pf-v5-c-table__tbody" role="rowgroup">
                 {rows.map(row => (
-                    <Tr key={row.name}>
+                    <div key={row.name} className="pf-v5-c-table__tr" role="row">
                         {row.cells.map((cell, i) => (
-                            <Td key={`${row.name}-${i}`} dataLabel={columns[i]}>{cell}</Td>
+                            <div key={`${row.name}-${i}`} role="cell" className="pf-v5-c-table__td">{cell}</div>
                         ))}
                         {!isReadOnly && onAction && (
-                            <Td isActionCell>
-                                <ActionsColumn items={actions(row.name)} />
-                            </Td>
+                            <div role="cell" className="pf-v5-c-table__td">
+                                <div className="pf-v5-c-dropdown">
+                                    <button className="pf-v5-c-button pf-m-primary" type="button" onClick={() => onAction?.('modify', row.name)}>Modify</button>
+                                    <button className="pf-v5-c-button pf-m-danger" type="button" onClick={() => onAction?.('delete', row.name)}>Delete</button>
+                                </div>
+                            </div>
                         )}
-                    </Tr>
+                    </div>
                 ))}
-            </Tbody>
-        </Table>
+            </div>
+        </div>
     );
 };
 
@@ -1222,6 +1235,12 @@ const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onClose, on
                     )}
                 </FormGroup>
             </Form>
+            <div className="pf-v5-c-modal-box__footer">
+                <Button key="save" variant="primary" onClick={handleSave} isDisabled={!!loading || !isFormValid()}>
+                    {loading ? <Spinner size="sm" /> : 'Save'}
+                </Button>
+                <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
+            </div>
         </Modal>
     );
 };
@@ -1327,6 +1346,12 @@ const ModifyGroupModal: React.FC<ModifyGroupModalProps> = ({ isOpen, onClose, on
                     )}
                 </FormGroup>
             </Form>
+            <div className="pf-v5-c-modal-box__footer">
+                <Button key="save" variant="primary" onClick={handleSave} isDisabled={!!loading || !isFormValid()}>
+                    {loading ? <Spinner size="sm" /> : 'Save'}
+                </Button>
+                <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
+            </div>
         </Modal>
     );
 };
@@ -1405,34 +1430,40 @@ const SharesTable: React.FC<SharesTableProps> = ({ shares, onAction, isReadOnly 
         ]
     }));
 
-    const actions = (share: string): IAction[] => [
+    const actions = (share: string) => [
         { title: 'Modify Share', onClick: () => onAction?.('modify', share) },
-        { isSeparator: true },
+        { isSeparator: true as const },
         { title: 'Delete Share', onClick: () => onAction?.('delete', share) },
     ];
 
     return (
-        <Table aria-label="Shares Table">
-            <Thead>
-                <Tr>
-                    {columns.map((col, i) => <Th key={i}>{col}</Th>)}
-                </Tr>
-            </Thead>
-            <Tbody>
+        <div className="pf-v5-c-table pf-m-grid-md" role="grid" aria-label="Shares Table">
+            <div className="pf-v5-c-table__thead" role="rowgroup">
+                <div className="pf-v5-c-table__tr" role="row">
+                    {columns.map((col, i) => (
+                        <div key={i} role="columnheader" className="pf-v5-c-table__th">{col}</div>
+                    ))}
+                    {!isReadOnly && <div className="pf-v5-c-table__th" />}
+                </div>
+            </div>
+            <div className="pf-v5-c-table__tbody" role="rowgroup">
                 {rows.map(row => (
-                    <Tr key={row.name}>
+                    <div key={row.name} className="pf-v5-c-table__tr" role="row">
                         {row.cells.map((cell, i) => (
-                            <Td key={`${row.name}-${i}`} dataLabel={columns[i]}>{cell}</Td>
+                            <div key={`${row.name}-${i}`} role="cell" className="pf-v5-c-table__td">{cell}</div>
                         ))}
                         {!isReadOnly && onAction && (
-                            <Td isActionCell>
-                                <ActionsColumn items={actions(row.name)} />
-                            </Td>
+                            <div role="cell" className="pf-v5-c-table__td">
+                                <div className="pf-v5-c-dropdown">
+                                    <button className="pf-v5-c-button pf-m-primary" type="button" onClick={() => onAction?.('modify', row.name)}>Modify</button>
+                                    <button className="pf-v5-c-button pf-m-danger" type="button" onClick={() => onAction?.('delete', row.name)}>Delete</button>
+                                </div>
+                            </div>
                         )}
-                    </Tr>
+                    </div>
                 ))}
-            </Tbody>
-        </Table>
+            </div>
+        </div>
     );
 };
 
@@ -1509,17 +1540,6 @@ const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, on
             title="Create New Share"
             isOpen={isOpen}
             onClose={onClose}
-            actions={[
-                <Button
-                    key="save"
-                    variant="primary"
-                    onClick={handleSave}
-                    isDisabled={loading || !isFormValid()}
-                >
-                    {loading ? <Spinner size="sm" /> : 'Save'}
-                </Button>,
-                <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
-            ]}
         >
             {error && <Alert variant="danger" title="Failed to create share">{error}</Alert>}
             <Form>
@@ -1715,6 +1735,17 @@ const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, on
                     </GridItem>
                 </Grid>
             </Form>
+            <div className="pf-v5-c-modal-box__footer">
+                <Button
+                    key="save"
+                    variant="primary"
+                    onClick={handleSave}
+                    isDisabled={!!loading || !isFormValid()}
+                >
+                    {loading ? <Spinner size="sm" /> : 'Save'}
+                </Button>
+                <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
+            </div>
         </Modal>
     );
 };
@@ -1760,12 +1791,6 @@ const ModifyShareModal: React.FC<ModifyShareModalProps> = ({ isOpen, onClose, on
             title={`Modify Share ${share}`}
             isOpen={isOpen}
             onClose={onClose}
-            actions={[
-                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading || !isFormValid()}>
-                    {loading ? <Spinner size="sm" /> : 'Save'}
-                </Button>,
-                <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
-            ]}
         >
             {error && <Alert variant="danger" title="Failed to modify share">{error}</Alert>}
             <Form>
@@ -1800,6 +1825,12 @@ const ModifyShareModal: React.FC<ModifyShareModalProps> = ({ isOpen, onClose, on
                     <p><small>Note: This is a simplified modification dialog. A full implementation would include all modifiable properties.</small></p>
                 </Content>
             </Form>
+            <ModalBoxFooter>
+                <Button key="save" variant="primary" onClick={handleSave} isDisabled={!!loading || !isFormValid()}>
+                    {loading ? <Spinner size="sm" /> : 'Save'}
+                </Button>
+                <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
+            </ModalBoxFooter>
         </Modal>
     );
 };
@@ -1834,12 +1865,6 @@ const DeleteShareModal: React.FC<DeleteShareModalProps> = ({ isOpen, onClose, on
             title={`Delete Share ${share}`}
             isOpen={isOpen}
             onClose={onClose}
-            actions={[
-                <Button key="confirm" variant="danger" onClick={handleConfirm} isDisabled={loading}>
-                    {loading ? <Spinner size="sm" /> : 'Delete'}
-                </Button>,
-                <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
-            ]}
         >
             {error && <Alert variant="danger" title="Failed to delete share">{error}</Alert>}
             <p>Are you sure you want to delete share <strong>{share}</strong>?</p>
@@ -1849,6 +1874,12 @@ const DeleteShareModal: React.FC<DeleteShareModalProps> = ({ isOpen, onClose, on
                 isChecked={deleteData}
                 onChange={(_event, checked) => setDeleteData(checked)}
             />
+            <ModalBoxFooter>
+                <Button key="confirm" variant="danger" onClick={handleConfirm} isDisabled={!!loading}>
+                    {loading ? <Spinner size="sm" /> : 'Delete'}
+                </Button>
+                <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
+            </ModalBoxFooter>
         </Modal>
     );
 };
