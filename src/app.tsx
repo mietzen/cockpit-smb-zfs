@@ -94,22 +94,55 @@ interface State {
 
 // API Wrapper for smb-zfs commands (keeping existing)
 const smbZfsApi = {
-    getState: (): Promise<State> => cockpit.spawn(["smb-zfs", "get-state"]).then(JSON.parse),
-    listPools: (): Promise<string[]> => cockpit.spawn(["smb-zfs", "list", "pools", "--json"]).then(JSON.parse),
-    run: (command: string[]): Promise<any> => cockpit.spawn(["smb-zfs", ...command, "--json"]).then(output => {
-        try {
-            const result = JSON.parse(output);
-            if (result.error) {
-                throw new Error(result.error);
-            }
-            return result;
-        } catch (e) {
-            if (output.toLowerCase().startsWith("error:")) {
-                throw new Error(output);
-            }
-            throw new Error("An unexpected error occurred: " + output);
-        }
-    })
+    getState: (): Promise<State> =>
+        cockpit.spawn(["smb-zfs", "get-state", "--json"])
+            .then(output => {
+                if (!output) return {} as any;
+                try {
+                    return JSON.parse(output);
+                } catch {
+                    if (output.toLowerCase().startsWith("error:")) {
+                        throw new Error(output);
+                    }
+                    throw new Error("Failed to parse state JSON");
+                }
+            }),
+
+    listPools: (): Promise<string[]> =>
+        cockpit.spawn(["smb-zfs", "list", "pools", "--json"])
+            .then(output => {
+                if (!output) return [];
+                try {
+                    return JSON.parse(output);
+                } catch {
+                    if (output.toLowerCase().startsWith("error:")) {
+                        throw new Error(output);
+                    }
+                    throw new Error("Failed to parse pools JSON");
+                }
+            }),
+
+    run: (command: string[]): Promise<unknown> => {
+        const mutating = ["create", "modify", "delete", "passwd"].includes(command[0]);
+        return cockpit
+            .spawn(["smb-zfs", ...command, "--json"], mutating ? { superuser: "require" } : undefined)
+            .then(output => {
+                if (!output) return null;
+                try {
+                    const result = JSON.parse(output);
+                    if ((result as any)?.error) {
+                        throw new Error((result as any).error);
+                    }
+                    return result;
+                } catch {
+                    if (output.toLowerCase().startsWith("error:")) {
+                        throw new Error(output);
+                    }
+                    // If output is plain text but not an "error:" line, return it for callers that expect strings
+                    return output;
+                }
+            });
+    }
 };
 
 // Main Application Component (keeping existing structure)
@@ -124,16 +157,28 @@ const App = () => {
     const refreshState = useCallback(() => {
         setLoading(true);
         smbZfsApi.getState()
-            .then(data => {
-                setState(data);
+            .then((data: any) => {
+                const normalized: State = {
+                    initialized: Boolean(data?.initialized),
+                    primary_pool: data?.primary_pool || "",
+                    secondary_pools: Array.isArray(data?.secondary_pools) ? data.secondary_pools : [],
+                    server_name: data?.server_name || "",
+                    workgroup: data?.workgroup || "",
+                    macos_optimized: Boolean(data?.macos_optimized),
+                    default_home_quota: data?.default_home_quota || "",
+                    users: data?.users || {},
+                    groups: data?.groups || {},
+                    shares: data?.shares || {},
+                };
+                setState(normalized);
                 setError(null);
             })
             .catch(err => {
-                if (err.message.includes("not initialized")) {
-                    setState({ initialized: false });
+                if ((err?.message || "").includes("not initialized")) {
+                    setState({ initialized: false, secondary_pools: [], users: {}, groups: {}, shares: {} });
                     setError(null);
                 } else {
-                    setError(err.message);
+                    setError(err?.message || String(err));
                 }
             })
             .finally(() => setLoading(false));
@@ -141,12 +186,20 @@ const App = () => {
 
     useEffect(() => {
         const permission = cockpit.permission();
-        permission.addEventListener("changed", () => {
+        const onChanged = () => {
             setIsRoot(permission.is_superuser || false);
-        });
+        };
+        permission.addEventListener("changed", onChanged);
         setIsRoot(permission.is_superuser || false);
         setCurrentUser(cockpit.user?.name || "unknown");
         refreshState();
+        return () => {
+            try {
+                permission.removeEventListener("changed", onChanged);
+            } catch {
+                // older cockpit may not support removeEventListener; ignore
+            }
+        };
     }, [refreshState]);
 
     const handleTabClick = (_event: React.MouseEvent, tabIndex: string | number) => {
@@ -158,7 +211,22 @@ const App = () => {
     }
 
     if (error) {
-        return <Page><PageSection><Alert variant="danger" title="Error Loading Plugin">{error}</Alert></PageSection></Page>;
+        return (
+            <Page>
+                <PageSection>
+                    <Alert
+                        variant="danger"
+                        title="Error Loading Plugin"
+                        actionClose={{ title: 'Close', onClose: () => setError(null) }}
+                        actionLinks={
+                            <Button variant="primary" onClick={refreshState}>Retry</Button>
+                        }
+                    >
+                        {error}
+                    </Alert>
+                </PageSection>
+            </Page>
+        );
     }
 
     if (!state) {
@@ -642,7 +710,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onSa
             onClose={onClose}
             actions={[
                 <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading || !isFormValid()}>
-                    Save
+                    {loading ? <Spinner size="sm" /> : 'Save'}
                 </Button>,
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
             ]}
@@ -763,7 +831,7 @@ const ModifyUserModal: React.FC<ModifyUserModalProps> = ({ isOpen, onClose, onSa
             onClose={onClose}
             actions={[
                 <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading || !quota.isValid}>
-                    Save
+                    {loading ? <Spinner size="sm" /> : 'Save'}
                 </Button>,
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
             ]}
@@ -830,7 +898,7 @@ const DeleteUserModal: React.FC<DeleteUserModalProps> = ({ isOpen, onClose, onSa
             onClose={onClose}
             actions={[
                 <Button key="confirm" variant="danger" onClick={handleConfirm} isDisabled={loading}>
-                    Delete
+                    {loading ? <Spinner size="sm" /> : 'Delete'}
                 </Button>,
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
             ]}
@@ -839,7 +907,7 @@ const DeleteUserModal: React.FC<DeleteUserModalProps> = ({ isOpen, onClose, onSa
             <p>Are you sure you want to delete user <strong>{user}</strong>?</p>
             <Checkbox
                 label="Permanently delete the user's ZFS home directory."
-                id="delete-data"
+                id={`delete-data-user-${user}`}
                 isChecked={deleteData}
                 onChange={(_event, checked) => setDeleteData(checked)}
             />
@@ -1096,7 +1164,7 @@ const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onClose, on
             onClose={onClose}
             actions={[
                 <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading || !isFormValid()}>
-                    Save
+                    {loading ? <Spinner size="sm" /> : 'Save'}
                 </Button>,
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
             ]}
@@ -1204,7 +1272,7 @@ const ModifyGroupModal: React.FC<ModifyGroupModalProps> = ({ isOpen, onClose, on
             onClose={onClose}
             actions={[
                 <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading || !isFormValid()}>
-                    Save
+                    {loading ? <Spinner size="sm" /> : 'Save'}
                 </Button>,
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
             ]}
@@ -1448,7 +1516,7 @@ const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, on
                     onClick={handleSave}
                     isDisabled={loading || !isFormValid()}
                 >
-                    Save
+                    {loading ? <Spinner size="sm" /> : 'Save'}
                 </Button>,
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
             ]}
@@ -1694,7 +1762,7 @@ const ModifyShareModal: React.FC<ModifyShareModalProps> = ({ isOpen, onClose, on
             onClose={onClose}
             actions={[
                 <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading || !isFormValid()}>
-                    Save
+                    {loading ? <Spinner size="sm" /> : 'Save'}
                 </Button>,
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
             ]}
@@ -1768,7 +1836,7 @@ const DeleteShareModal: React.FC<DeleteShareModalProps> = ({ isOpen, onClose, on
             onClose={onClose}
             actions={[
                 <Button key="confirm" variant="danger" onClick={handleConfirm} isDisabled={loading}>
-                    Delete
+                    {loading ? <Spinner size="sm" /> : 'Delete'}
                 </Button>,
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
             ]}
@@ -1777,7 +1845,7 @@ const DeleteShareModal: React.FC<DeleteShareModalProps> = ({ isOpen, onClose, on
             <p>Are you sure you want to delete share <strong>{share}</strong>?</p>
             <Checkbox
                 label="Permanently delete the share's ZFS dataset."
-                id="delete-data"
+                id={`delete-data-share-${share}`}
                 isChecked={deleteData}
                 onChange={(_event, checked) => setDeleteData(checked)}
             />
@@ -1864,14 +1932,12 @@ const validateQuota = (quota: string): ValidationResult => {
     if (!quota) {
         return { isValid: true };
     }
-
-    if (!/^none$|^\d+\.?\d*[kmgtpez]?$/i.test(quota)) {
+    if (!/^none$|^\d+(?:\.\d+)?[kmgtpez]?$/i.test(quota)) {
         return {
             isValid: false,
-            error: "Quota must be 'none' or numeric value with unit (e.g., 512M, 120G, 1.5T)"
+            error: "Quota must be 'none' or numeric value with optional unit (e.g., 512M, 120G, 1.5T)"
         };
     }
-
     return { isValid: true };
 };
 
@@ -1927,21 +1993,13 @@ const validateDatasetPath = (path: string): ValidationResult => {
     if (!path) {
         return { isValid: false, error: "Dataset path is required." };
     }
-
-    if (!/^[a-zA-Z0-9][a-zA-Z0-9_\-\/]*[a-zA-Z0-9]$/.test(path) && path.length > 1) {
+    const re = /^[A-Za-z0-9][A-Za-z0-9_-]*(\/[A-Za-z0-9][A-Za-z0-9_-]*)*$/;
+    if (!re.test(path)) {
         return {
             isValid: false,
-            error: "Dataset path must contain only alphanumeric characters, underscores, hyphens, and forward slashes."
+            error: "Dataset path must be segments of [A-Za-z0-9][A-Za-z0-9_-]* separated by '/', with no leading/trailing '/' or '//'."
         };
     }
-
-    if (path.includes('//') || path.startsWith('/') || path.endsWith('/')) {
-        return {
-            isValid: false,
-            error: "Dataset path cannot start/end with '/' or contain consecutive '//' characters."
-        };
-    }
-
     return { isValid: true };
 };
 
