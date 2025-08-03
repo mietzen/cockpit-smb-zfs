@@ -1,5 +1,72 @@
 @use "page.scss";
 
-p {
-    font-weight: bold;
+/* Root scope for this module to avoid leaking into Cockpit globally */
+.smbzfs-root {
+    /* Ensure our content can stretch to the full viewport height next to the Cockpit sidebar */
+    min-height: 100vh;
+    display: flex;
+
+    /* PatternFly page should expand and not introduce unintended inner max-widths */
+    .pf-v5-c-page {
+        flex: 1 1 auto;
+        min-width: 0; /* allow children to shrink properly */
+        min-height: 100%;
+    }
+
+    /* Remove unintended "content max-width" that some starter layouts introduce */
+    .pf-v5-c-page__main {
+        max-width: none;
+    }
+
+    /* The very first light section (hero/intro) can stay readable; others full width */
+    .pf-v5-c-page__main-section {
+        &.pf-m-light {
+            /* keep roomy spacing but no artificial outer gap to the sidebar */
+            padding-left: var(--pf-v5-global--spacer--lg);
+            padding-right: var(--pf-v5-global--spacer--lg);
+        }
+    }
+
+    /* Reading width utility for paragraphs and explanatory text */
+    .smbzfs-reading {
+        max-width: 70ch;
+    }
+
+    /* Table overflow guardrail in narrow viewports */
+    .smbzfs-table-wrap {
+        overflow: auto;
+    }
+
+    /* Modal improvements: more comfortable body padding and better widths */
+    .pf-v5-c-modal-box {
+        /* Tweak PF defaults slightly for better readability */
+        &.pf-m-sm {
+            max-width: 520px;
+        }
+        &.pf-m-md {
+            max-width: 720px;
+        }
+        &.pf-m-lg {
+            max-width: 980px;
+        }
+    }
+
+    /* Ensure content inside modal does not touch rounded corners */
+    .pf-v5-c-modal-box__body {
+        padding: var(--pf-v5-global--spacer--lg);
+    }
+
+    /* Reset overly strong global paragraph styling from earlier stub */
+    p {
+        font-weight: normal;
+        line-height: 1.5;
+    }
+
+    /* Better long-word handling in helper/error texts inside forms/modals */
+    .pf-v5-c-helper-text,
+    .pf-v5-c-form__helper-text,
+    .pf-v5-c-content {
+        overflow-wrap: anywhere;
+        word-break: normal;
+    }
 }

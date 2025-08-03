@@ -30,6 +30,6 @@ import './app.scss';
 document.addEventListener("DOMContentLoaded", () => {
     const container = document.getElementById("app");
     if (container) {
-        createRoot(container).render(<App />);
+        createRoot(container).render(<div className="smbzfs-root"><App /></div>);
     }
 });
