@@ -83,52 +83,99 @@ interface State {
 
 // API Wrapper for smb-zfs commands (keeping existing)
 const smbZfsApi = {
+    // Determine if '--json' is supported for the given command vector (after "smb-zfs")
+    // Based on provided bash completion:
+    // Allowed: setup, create (user|share|group), modify (group|share|home|setup),
+    //          delete (user|share|group), passwd, remove
+    // Not allowed: list, get-state, wizard, and global.
+    supportsJson(cmd: string[]): boolean {
+        const [c1, c2] = cmd;
+        if (!c1) return false;
+        switch (c1) {
+            case "setup":
+                return true;
+            case "create":
+                return ["user", "share", "group"].includes(c2 || "");
+            case "modify":
+                // group|share|home subcommands support --json; 'setup' as sub-sub also supports
+                return ["group", "share", "home", "setup"].includes(c2 || "");
+            case "delete":
+                return ["user", "share", "group"].includes(c2 || "");
+            case "passwd":
+                return true;
+            case "remove":
+                return true;
+            case "list":
+            case "get-state":
+            case "wizard":
+            default:
+                return false;
+        }
+    },
+
     getState: (): Promise<State> =>
-        cockpit.spawn(["smb-zfs", "get-state", "--json"])
+        cockpit.spawn(["smb-zfs", "get-state"])
             .then(output => {
                 if (!output) return {} as any;
+                // get-state has no --json; attempt JSON first, fallback to error or text
                 try {
                     return JSON.parse(output);
                 } catch {
                     if (output.toLowerCase().startsWith("error:")) {
                         throw new Error(output);
                     }
-                    throw new Error("Failed to parse state JSON");
+                    // If tool prints non-JSON state in some versions, treat as error for our UI
+                    throw new Error("Failed to parse state output");
                 }
             }),
 
     listPools: (): Promise<string[]> =>
-        cockpit.spawn(["smb-zfs", "list", "pools", "--json"])
+        cockpit.spawn(["smb-zfs", "list", "pools"])
             .then(output => {
                 if (!output) return [];
+                // list pools doesn't advertise --json; try JSON then fallback to line parsing
                 try {
                     return JSON.parse(output);
                 } catch {
                     if (output.toLowerCase().startsWith("error:")) {
                         throw new Error(output);
                     }
-                    throw new Error("Failed to parse pools JSON");
+                    // Fallback: parse one pool per line
+                    const lines = output.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+                    return lines;
                 }
             }),
 
     run: (command: string[]): Promise<unknown> => {
-        const mutating = ["create", "modify", "delete", "passwd"].includes(command[0]);
+        const mutating = ["create", "modify", "delete", "passwd", "remove", "setup"].includes(command[0]);
+        const args = ["smb-zfs", ...command];
+        if (smbZfsApi.supportsJson(command)) {
+            args.push("--json");
+        }
         return cockpit
-            .spawn(["smb-zfs", ...command, "--json"], mutating ? { superuser: "require" } : undefined)
+            .spawn(args, mutating ? { superuser: "require" } : undefined)
             .then(output => {
                 if (!output) return null;
-                try {
+                // If we requested JSON, parse; otherwise, be tolerant
+                if (args.includes("--json")) {
                     const result = JSON.parse(output);
                     if ((result as any)?.error) {
                         throw new Error((result as any).error);
                     }
                     return result;
-                } catch {
-                    if (output.toLowerCase().startsWith("error:")) {
-                        throw new Error(output);
+                } else {
+                    try {
+                        const result = JSON.parse(output);
+                        if ((result as any)?.error) {
+                            throw new Error((result as any).error);
+                        }
+                        return result;
+                    } catch {
+                        if (output.toLowerCase().startsWith("error:")) {
+                            throw new Error(output);
+                        }
+                        return output;
                     }
-                    // If output is plain text but not an "error:" line, return it for callers that expect strings
-                    return output;
                 }
             });
     }
@@ -948,6 +995,7 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
 
         setLoading(true);
         setError(null);
+        // passwd supports --json according to completion; keep it
         const proc = cockpit.spawn(["smb-zfs", "passwd", user, "--json"], { superuser: "require" });
         proc.input(password.value + "\n" + password.value + "\n", true);
         proc.stream((output: string) => console.log(output))
