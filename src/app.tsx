@@ -1825,12 +1825,12 @@ const ModifyShareModal: React.FC<ModifyShareModalProps> = ({ isOpen, onClose, on
                     <p><small>Note: This is a simplified modification dialog. A full implementation would include all modifiable properties.</small></p>
                 </Content>
             </Form>
-            <ModalBoxFooter>
+            <div className="pf-v5-c-modal-box__footer">
                 <Button key="save" variant="primary" onClick={handleSave} isDisabled={!!loading || !isFormValid()}>
                     {loading ? <Spinner size="sm" /> : 'Save'}
                 </Button>
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
-            </ModalBoxFooter>
+            </div>
         </Modal>
     );
 };
@@ -1874,12 +1874,12 @@ const DeleteShareModal: React.FC<DeleteShareModalProps> = ({ isOpen, onClose, on
                 isChecked={deleteData}
                 onChange={(_event, checked) => setDeleteData(checked)}
             />
-            <ModalBoxFooter>
+            <div className="pf-v5-c-modal-box__footer">
                 <Button key="confirm" variant="danger" onClick={handleConfirm} isDisabled={!!loading}>
                     {loading ? <Spinner size="sm" /> : 'Delete'}
                 </Button>
                 <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
-            </ModalBoxFooter>
+            </div>
         </Modal>
     );
 };
