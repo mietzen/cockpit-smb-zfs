@@ -301,7 +301,14 @@ const App = () => {
                 <GroupsTab groups={state.groups || {}} users={Object.keys(state.users || {})} onRefresh={refreshState} />
             </Tab>,
             <Tab key="shares" eventKey={3} title={<TabTitleText>Shares</TabTitleText>}>
-                <SharesTab shares={state.shares || {}} pools={[...(state.secondary_pools || []), state.primary_pool].filter(Boolean) as string[]} onRefresh={refreshState} />
+                <SharesTab
+                  shares={state.shares || {}}
+                  pools={[...(state.secondary_pools || []), state.primary_pool].filter(Boolean) as string[]}
+                  users={Object.keys(state.users || {})}
+                  groups={Object.keys(state.groups || {})}
+                  datasets={Object.values(state.shares || {}).map(s => s.dataset?.name).filter(Boolean) as string[]}
+                  onRefresh={refreshState}
+                />
             </Tab>
         );
     } else {
@@ -397,27 +404,12 @@ const InitialSetup: React.FC<InitialSetupProps> = ({ onSetupComplete }) => {
                         <Form>
                             <FormGroup label="Primary ZFS Pool" isRequired fieldId="primary-pool">
                                 <p>Select the ZFS pool for user home directories.</p>
-                                {pools.length > 0 ? (
-                                    <select
-                                        className="pf-v5-c-form-control"
-                                        value={primaryPool.value}
-                                        onChange={(e) => primaryPool.handleChange(e.target.value)}
-                                        onBlur={() => primaryPool.handleBlur()}
-                                    >
-                                        <option value="">Select a pool</option>
-                                        {pools.map(p => <option key={p} value={p}>{p}</option>)}
-                                    </select>
-                                ) : (
-                                    <TextInput
-                                        isRequired
-                                        type="text"
-                                        id="primary-pool"
-                                        value={primaryPool.value}
-                                        onChange={(_event, value) => primaryPool.handleChange(value)}
-                                        onBlur={() => primaryPool.handleBlur()}
-                                        validated={primaryPool.error ? 'error' : 'default'}
-                                    />
-                                )}
+                                <PoolSelect
+                                  id="primary-pool"
+                                  value={primaryPool.value}
+                                  onChange={(v) => primaryPool.handleChange(v)}
+                                  placeholder="Select a pool"
+                                />
                                 {primaryPool.error && (
                                     <FormHelperText>
                                         <HelperText>
@@ -430,13 +422,30 @@ const InitialSetup: React.FC<InitialSetupProps> = ({ onSetupComplete }) => {
                             </FormGroup>
 
                             <FormGroup label="Secondary ZFS Pools" fieldId="secondary-pools">
-                                <p>Space-separated list of other ZFS pools for shares.</p>
-                                <TextInput
-                                    type="text"
-                                    id="secondary-pools"
-                                    value={secondaryPools.value}
-                                    onChange={(_event, value) => secondaryPools.handleChange(value)}
-                                />
+                                <p>Select additional ZFS pools for shares (optional).</p>
+                                <div>
+                                    <label className="pf-u-screen-reader" htmlFor="secondary-pools-select">Secondary pools</label>
+                                    <select
+                                        id="secondary-pools-select"
+                                        multiple
+                                        className="pf-v5-c-form-control"
+                                        value={(secondaryPools.value || "").split(" ").filter(Boolean)}
+                                        onChange={(e) => {
+                                            const selected = Array.from(e.target.selectedOptions).map(o => o.value);
+                                            secondaryPools.handleChange(selected.join(" "));
+                                        }}
+                                        aria-label="secondary-pools-multiselect"
+                                    >
+                                        {pools.map(p => <option key={p} value={p}>{p}</option>)}
+                                    </select>
+                                </div>
+                                <FormHelperText>
+                                    <HelperText>
+                                        <HelperTextItem>
+                                            Hold Ctrl/Cmd to select multiple pools.
+                                        </HelperTextItem>
+                                    </HelperText>
+                                </FormHelperText>
                             </FormGroup>
 
                             <FormGroup label="Server Name" fieldId="server-name">
@@ -1344,7 +1353,7 @@ const ModifyGroupModal: React.FC<ModifyGroupModalProps> = ({ isOpen, onClose, on
                         value={addUsers.value}
                         onChange={(v) => addUsers.handleChange(v)}
                         options={allUsers}
-                        placeholder="Select users to add (type to filter…)"
+                        placeholder="Select users to add (type to filter…). Multiple accepted via comma."
                         aria-label="add-users-select"
                         allowEmpty
                     />
@@ -1365,7 +1374,7 @@ const ModifyGroupModal: React.FC<ModifyGroupModalProps> = ({ isOpen, onClose, on
                         value={removeUsers.value}
                         onChange={(v) => removeUsers.handleChange(v)}
                         options={allUsers}
-                        placeholder="Select users to remove (type to filter…)"
+                        placeholder="Select users to remove (type to filter…). Multiple accepted via comma."
                         aria-label="remove-users-select"
                         allowEmpty
                     />
@@ -1394,10 +1403,13 @@ const ModifyGroupModal: React.FC<ModifyGroupModalProps> = ({ isOpen, onClose, on
 interface SharesTabProps {
     shares: Record<string, ShareData>;
     pools: string[];
+    users: string[];
+    groups: string[];
+    datasets: string[];
     onRefresh: () => void;
 }
 
-const SharesTab: React.FC<SharesTabProps> = ({ shares, pools, onRefresh }) => {
+const SharesTab: React.FC<SharesTabProps> = ({ shares, pools, users, groups, datasets, onRefresh }) => {
     const [isCreateModalOpen, setCreateModalOpen] = useState(false);
     const [isModifyModalOpen, setModifyModalOpen] = useState(false);
     const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -1421,6 +1433,9 @@ const SharesTab: React.FC<SharesTabProps> = ({ shares, pools, onRefresh }) => {
                 onClose={() => setCreateModalOpen(false)}
                 onSave={onRefresh}
                 pools={pools}
+                users={users}
+                groups={groups}
+                datasets={datasets}
             />
             {selectedShare && <>
                 <ModifyShareModal
@@ -1506,9 +1521,12 @@ interface CreateShareModalProps {
     onClose: () => void;
     onSave: () => void;
     pools: string[];
+    users: string[];
+    groups: string[];
+    datasets: string[];
 }
 
-const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, onSave, pools }) => {
+const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, onSave, pools, users, groups, datasets }) => {
     const shareName = useValidation('', (value) => validateName(value, 'share'));
     const dataset = useValidation('', validateDatasetPath);
     const comment = useValidation('', () => ({ isValid: true }));
@@ -1609,7 +1627,7 @@ const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, on
                                 id="share-dataset"
                                 value={dataset.value}
                                 onChange={(v) => dataset.handleChange(v)}
-                                datasets={[]}
+                                datasets={datasets}
                                 placeholder="Select dataset (type to filter)…"
                                 aria-label="dataset-select"
                                 allowEmpty
@@ -1652,7 +1670,7 @@ const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, on
                               id="share-owner"
                               value={owner.value}
                               onChange={(v) => owner.handleChange(v)}
-                              options={[]}
+                              options={users}
                               placeholder="Select owner user"
                               aria-label="owner-user-select"
                               allowEmpty
@@ -1674,7 +1692,7 @@ const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, on
                               id="share-group"
                               value={group.value}
                               onChange={(v) => group.handleChange(v)}
-                              options={[]}
+                              options={groups}
                               placeholder="Select owner group"
                               aria-label="owner-group-select"
                               allowEmpty
@@ -1717,7 +1735,7 @@ const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, on
                               id="share-valid-users-users"
                               value={validUsers.value}
                               onChange={(v) => validUsers.handleChange(v)}
-                              options={[]}
+                              options={users}
                               placeholder="Select allowed users or prefix '@' for groups"
                               aria-label="valid-users-select"
                               allowEmpty
