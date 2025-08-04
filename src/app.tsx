@@ -210,8 +210,11 @@ const App = () => {
                 setError(null);
             })
             .catch(err => {
-                if ((err?.message || "").includes("not initialized")) {
-                    setState({ initialized: false, secondary_pools: [], users: {}, groups: {}, shares: {} });
+                const msg = (err?.message || "").toLowerCase();
+                // Accept multiple possible tool messages that indicate an uninitialized system
+                // e.g. "Error: System not set up. Run 'setup' first." or "not initialized"
+                if (msg.includes("system not set up") || msg.includes("run 'setup' first") || msg.includes("not initialized")) {
+                    setState({ initialized: false, secondary_pools: [], users: {}, groups: {}, shares: {} } as any);
                     setError(null);
                 } else {
                     setError(err?.message || String(err));
@@ -577,12 +580,6 @@ const DeleteModal: React.FC<DeleteModalProps> = ({ isOpen, onClose, onConfirm, i
         title={`Delete ${type}`}
         isOpen={isOpen}
         onClose={onClose}
-        actions={[
-            <Button key="confirm" variant="danger" onClick={onConfirm} isDisabled={!!loading}>
-                {loading ? <Spinner size="sm" /> : 'Delete'}
-            </Button>,
-            <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
-        ] as any}
     >
         {error && <Alert variant="danger" title={`Failed to delete ${type}`}>{error}</Alert>}
         Are you sure you want to delete the {type} <strong>{item}</strong>? This action cannot be undone.
@@ -1223,12 +1220,6 @@ const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onClose, on
             title="Create New Group"
             isOpen={isOpen}
             onClose={onClose}
-            actions={[
-                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading || !isFormValid()}>
-                    {loading ? <Spinner size="sm" /> : 'Save'}
-                </Button>,
-                <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
-            ]}
         >
             {error && <Alert variant="danger" title="Failed to create group">{error}</Alert>}
             <Form>
@@ -1337,12 +1328,6 @@ const ModifyGroupModal: React.FC<ModifyGroupModalProps> = ({ isOpen, onClose, on
             title={`Modify Group ${group}`}
             isOpen={isOpen}
             onClose={onClose}
-            actions={[
-                <Button key="save" variant="primary" onClick={handleSave} isDisabled={loading || !isFormValid()}>
-                    {loading ? <Spinner size="sm" /> : 'Save'}
-                </Button>,
-                <Button key="cancel" variant="link" onClick={onClose}>Cancel</Button>
-            ]}
         >
             {error && <Alert variant="danger" title="Failed to modify group">{error}</Alert>}
             <Form>
