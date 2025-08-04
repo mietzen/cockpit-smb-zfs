@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import cockpit from "cockpit";
+import { DatasetSelect, UsersSelect, GroupsSelect, PoolSelect } from "./selectors";
 import {
     Alert,
     Button,
@@ -1338,14 +1339,14 @@ const ModifyGroupModal: React.FC<ModifyGroupModalProps> = ({ isOpen, onClose, on
                 </FormGroup>
 
                 <FormGroup label="Add Users" fieldId="add-users">
-                    <TextInput
-                        type="text"
+                    <UsersSelect
                         id="add-users"
-                        placeholder="comma-separated"
                         value={addUsers.value}
-                        onChange={(_event, value) => addUsers.handleChange(value)}
-                        onBlur={() => addUsers.handleBlur()}
-                        validated={addUsers.error ? 'error' : 'default'}
+                        onChange={(v) => addUsers.handleChange(v)}
+                        options={allUsers}
+                        placeholder="Select users to add (type to filter…)"
+                        aria-label="add-users-select"
+                        allowEmpty
                     />
                     {addUsers.error && (
                         <FormHelperText>
@@ -1359,14 +1360,14 @@ const ModifyGroupModal: React.FC<ModifyGroupModalProps> = ({ isOpen, onClose, on
                 </FormGroup>
 
                 <FormGroup label="Remove Users" fieldId="remove-users">
-                    <TextInput
-                        type="text"
+                    <UsersSelect
                         id="remove-users"
-                        placeholder="comma-separated"
                         value={removeUsers.value}
-                        onChange={(_event, value) => removeUsers.handleChange(value)}
-                        onBlur={() => removeUsers.handleBlur()}
-                        validated={removeUsers.error ? 'error' : 'default'}
+                        onChange={(v) => removeUsers.handleChange(v)}
+                        options={allUsers}
+                        placeholder="Select users to remove (type to filter…)"
+                        aria-label="remove-users-select"
+                        allowEmpty
                     />
                     {removeUsers.error && (
                         <FormHelperText>
@@ -1523,6 +1524,9 @@ const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, on
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    // Build options from current tab-level state via get-state once loaded (passed into SharesTab -> here via props not available)
+    // We don't have direct access to users/groups here, so we infer from selector props we will pass below.
+
     const isFormValid = () => {
         return shareName.isValid &&
                dataset.isValid &&
@@ -1601,16 +1605,15 @@ const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, on
                     </GridItem>
                     <GridItem span={6}>
                         <FormGroup label="ZFS Dataset Path" isRequired fieldId="share-dataset">
-                            <TextInput
-                                isRequired
-                                type="text"
+                            <DatasetSelect
                                 id="share-dataset"
-                                placeholder="e.g., data/projects"
                                 value={dataset.value}
-                                onChange={(_event, value) => dataset.handleChange(value)}
-                                onBlur={() => dataset.handleBlur()}
-                                validated={dataset.error ? 'error' : 'default'}
-                            />
+                                onChange={(v) => dataset.handleChange(v)}
+                                datasets={[]}
+                                placeholder="Select dataset (type to filter)…"
+                                aria-label="dataset-select"
+                                allowEmpty
+                              />
                             {dataset.error && (
                                 <FormHelperText>
                                     <HelperText>
@@ -1624,13 +1627,13 @@ const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, on
                     </GridItem>
                     <GridItem span={6}>
                         <FormGroup label="ZFS Pool" fieldId="share-pool">
-                            <select
-                                className="pf-v5-c-form-control"
-                                value={pool}
-                                onChange={(e) => setPool(e.target.value)}
-                            >
-                                {pools.map(p => <option key={p} value={p}>{p}</option>)}
-                            </select>
+                            <PoolSelect
+                              id="share-pool"
+                              value={pool}
+                              onChange={setPool}
+                              placeholder="Select a pool"
+                              allowEmpty
+                            />
                         </FormGroup>
                     </GridItem>
                     <GridItem span={6}>
@@ -1645,13 +1648,14 @@ const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, on
                     </GridItem>
                     <GridItem span={6}>
                         <FormGroup label="Owner (user)" fieldId="share-owner">
-                            <TextInput
-                                type="text"
-                                id="share-owner"
-                                value={owner.value}
-                                onChange={(_event, value) => owner.handleChange(value)}
-                                onBlur={() => owner.handleBlur()}
-                                validated={owner.error ? 'error' : 'default'}
+                            <UsersSelect
+                              id="share-owner"
+                              value={owner.value}
+                              onChange={(v) => owner.handleChange(v)}
+                              options={[]}
+                              placeholder="Select owner user"
+                              aria-label="owner-user-select"
+                              allowEmpty
                             />
                             {owner.error && (
                                 <FormHelperText>
@@ -1666,13 +1670,14 @@ const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, on
                     </GridItem>
                     <GridItem span={6}>
                         <FormGroup label="Owner (group)" fieldId="share-group">
-                            <TextInput
-                                type="text"
-                                id="share-group"
-                                value={group.value}
-                                onChange={(_event, value) => group.handleChange(value)}
-                                onBlur={() => group.handleBlur()}
-                                validated={group.error ? 'error' : 'default'}
+                            <GroupsSelect
+                              id="share-group"
+                              value={group.value}
+                              onChange={(v) => group.handleChange(v)}
+                              options={[]}
+                              placeholder="Select owner group"
+                              aria-label="owner-group-select"
+                              allowEmpty
                             />
                             {group.error && (
                                 <FormHelperText>
@@ -1708,14 +1713,14 @@ const CreateShareModal: React.FC<CreateShareModalProps> = ({ isOpen, onClose, on
                     </GridItem>
                     <GridItem span={6}>
                         <FormGroup label="Valid Users/Groups" fieldId="share-valid-users">
-                            <TextInput
-                                type="text"
-                                id="share-valid-users"
-                                placeholder="user1,@group1"
-                                value={validUsers.value}
-                                onChange={(_event, value) => validUsers.handleChange(value)}
-                                onBlur={() => validUsers.handleBlur()}
-                                validated={validUsers.error ? 'error' : 'default'}
+                            <UsersSelect
+                              id="share-valid-users-users"
+                              value={validUsers.value}
+                              onChange={(v) => validUsers.handleChange(v)}
+                              options={[]}
+                              placeholder="Select allowed users or prefix '@' for groups"
+                              aria-label="valid-users-select"
+                              allowEmpty
                             />
                             {validUsers.error && (
                                 <FormHelperText>
